@@ -28,12 +28,7 @@
 
 module Statistics.EProcess (
     -- * Bettors
-    Bettor
-  , AGRAPA
-  , ONS
-  , fixed
-  , agrapa
-  , ons
+    Bettor(..)
 
     -- * Bounded-mean test
     --
@@ -67,24 +62,24 @@ import qualified Statistics.EProcess.TwoSample as TS
 
 -- | See 'Mean.config'.
 meanConfig
-  :: Double                -- ^ null mean @m@
-  -> Double                -- ^ sample lower bound
-  -> Double                -- ^ sample upper bound
-  -> Double                -- ^ significance level @alpha@
-  -> (Double -> Bettor s)
-  -> Mean.Config s
+  :: Double  -- ^ null mean @m@
+  -> Double  -- ^ sample lower bound
+  -> Double  -- ^ sample upper bound
+  -> Double  -- ^ significance level @alpha@
+  -> Bettor
+  -> Mean.Config
 meanConfig = Mean.config
 
 -- | See 'Mean.initial'.
-initMeanState :: Mean.Config s -> Mean.State s
+initMeanState :: Mean.Config -> Mean.State
 initMeanState = Mean.initial
 
 -- | See 'Mean.update'.
-updateMean :: Mean.Config s -> Mean.State s -> Double -> Mean.State s
+updateMean :: Mean.Config -> Mean.State -> Double -> Mean.State
 updateMean = Mean.update
 
 -- | See 'Mean.decide'.
-decideMean :: Mean.Config s -> Mean.State s -> Mean.Verdict
+decideMean :: Mean.Config -> Mean.State -> Mean.Verdict
 decideMean = Mean.decide
 
 -- $twosample
@@ -97,27 +92,27 @@ twoSampleConfig
   :: Double
   -> Double
   -> Double
-  -> (Double -> Bettor s)
-  -> TS.Config s
+  -> Bettor
+  -> TS.Config
 twoSampleConfig = TS.config
 
 -- | See 'TS.initial'.
-initTwoSampleState :: TS.Config s -> TS.State s
+initTwoSampleState :: TS.Config -> TS.State
 initTwoSampleState = TS.initial
 
 -- | See 'TS.update'.
 updateTwoSample
-  :: TS.Config s -> TS.State s -> (Double, Double) -> TS.State s
+  :: TS.Config -> TS.State -> (Double, Double) -> TS.State
 updateTwoSample = TS.update
 
 -- | See 'TS.decide'.
-decideTwoSample :: TS.Config s -> TS.State s -> TS.Verdict
+decideTwoSample :: TS.Config -> TS.State -> TS.Verdict
 decideTwoSample = TS.decide
 
 -- | Current log-wealth of a 'Mean.State'.
-logWealth :: Mean.State s -> Double
+logWealth :: Mean.State -> Double
 logWealth = Mean.logWealth
 
 -- | Sample count consumed so far.
-samples :: Mean.State s -> Int
+samples :: Mean.State -> Int
 samples = Mean.samples

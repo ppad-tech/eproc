@@ -38,10 +38,10 @@ import Statistics.EProcess.Mean (Verdict(..))
 import Statistics.EProcess.Bettor (Bettor)
 
 -- | Test configuration.
-newtype Config s = Config (M.Config s)
+newtype Config = Config M.Config
 
 -- | Test state.
-newtype State s = State (M.State s)
+newtype State = State M.State
 
 -- | Build a paired two-sample test configuration.
 --
@@ -49,34 +49,40 @@ newtype State s = State (M.State s)
 --   samples; differences then lie in @[lo - hi, hi - lo]@.
 --
 --   >>> import qualified Statistics.EProcess.Bettor as B
---   >>> let cfg = config 0.0 1.0 1.0e-6 B.ons
+--   >>> let cfg = config 0.0 1.0 1.0e-6 B.Ons
 config
-  :: Double                -- ^ sample lower bound @lo@
-  -> Double                -- ^ sample upper bound @hi@
-  -> Double                -- ^ significance level @alpha@
-  -> (Double -> Bettor s)  -- ^ bettor builder
-  -> Config s
-config !lo !hi !alpha mk =
-  let !b = hi - lo
-  in  Config (M.config 0 (negate b) b alpha mk)
+  :: Double  -- ^ sample lower bound @lo@
+  -> Double  -- ^ sample upper bound @hi@
+  -> Double  -- ^ significance level @alpha@
+  -> Bettor  -- ^ bettor strategy
+  -> Config
+config !lo !hi !alpha b =
+  let !d = hi - lo
+  in  Config (M.config 0 (negate d) d alpha b)
+{-# INLINE config #-}
 
 -- | Initial state for streaming.
-initial :: Config s -> State s
+initial :: Config -> State
 initial (Config c) = State (M.initial c)
+{-# INLINE initial #-}
 
 -- | Fold one paired observation @(a, b)@ into the state.
-update :: Config s -> State s -> (Double, Double) -> State s
+update :: Config -> State -> (Double, Double) -> State
 update (Config c) (State s) (!a, !b) =
   State (M.update c s (a - b))
+{-# INLINE update #-}
 
 -- | Decide based on current wealth.
-decide :: Config s -> State s -> Verdict
+decide :: Config -> State -> Verdict
 decide (Config c) (State s) = M.decide c s
+{-# INLINE decide #-}
 
 -- | Current log-wealth.
-logWealth :: State s -> Double
+logWealth :: State -> Double
 logWealth (State s) = M.logWealth s
+{-# INLINE logWealth #-}
 
 -- | Sample count consumed so far.
-samples :: State s -> Int
+samples :: State -> Int
 samples (State s) = M.samples s
+{-# INLINE samples #-}

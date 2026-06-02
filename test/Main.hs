@@ -48,7 +48,7 @@ bernoulli !p g =
 -- with the early-stopping rule built in. returns (verdict, samples
 -- consumed).
 runMeanBernoulli
-  :: M.Config s
+  :: M.Config
   -> Double           -- ^ p
   -> Int              -- ^ budget
   -> Gen
@@ -66,7 +66,7 @@ runMeanBernoulli cfg p budget g0 = go 0 g0 (M.initial cfg)
 
 -- fraction of trials that rejected.
 rejectionRate
-  :: M.Config s
+  :: M.Config
   -> Double           -- ^ true bernoulli p
   -> Int              -- ^ budget per trial
   -> Int              -- ^ number of trials
@@ -88,12 +88,12 @@ genSeq g = let (_, g') = stepGen g in g : genSeq g'
 sanityTests :: TestTree
 sanityTests = testGroup "sanity" [
     testCase "degenerate input never rejects" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-6 E.ons :: M.Config E.ONS
+      let cfg = M.config 0.5 0.0 1.0 1.0e-6 E.Ons
           xs = replicate 5000 0.5
           st = foldl' (M.update cfg) (M.initial cfg) xs
       M.decide cfg st @?= M.Continue
   , testCase "two-sided thresholds applied symmetrically" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-6 E.ons :: M.Config E.ONS
+      let cfg = M.config 0.5 0.0 1.0 1.0e-6 E.Ons
       M.decide cfg (M.initial cfg) @?= M.Continue
   ]
 
@@ -104,14 +104,14 @@ sanityTests = testGroup "sanity" [
 calibrationTests :: TestTree
 calibrationTests = testGroup "null calibration" [
     testCase "ONS, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = M.config 0.5 0.0 1.0 0.05 E.ons :: M.Config E.ONS
+      let cfg = M.config 0.5 0.0 1.0 0.05 E.Ons
           rate = rejectionRate cfg 0.5 2000 200 12345
       -- expected rate ≤ 0.05; allow up to 0.10 slack for sampling
       -- variability over 200 trials.
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
   , testCase "aGRAPA, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = M.config 0.5 0.0 1.0 0.05 E.agrapa :: M.Config E.AGRAPA
+      let cfg = M.config 0.5 0.0 1.0 0.05 E.Agrapa
           rate = rejectionRate cfg 0.5 2000 200 67890
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
@@ -123,13 +123,12 @@ calibrationTests = testGroup "null calibration" [
 powerTests :: TestTree
 powerTests = testGroup "power" [
     testCase "ONS detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.ons :: M.Config E.ONS
+      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.Ons
           rate = rejectionRate cfg 0.7 5000 100 11111
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
   , testCase "aGRAPA detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.agrapa
-            :: M.Config E.AGRAPA
+      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.Agrapa
           rate = rejectionRate cfg 0.7 5000 100 22222
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
@@ -138,7 +137,7 @@ powerTests = testGroup "power" [
 -- two-sample paired test.
 
 runTSPaired
-  :: TS.Config s
+  :: TS.Config
   -> Double
   -> Double           -- ^ p for A and B
   -> Int
@@ -159,11 +158,11 @@ runTSPaired cfg pA pB budget g0 = go 0 g0 (TS.initial cfg)
 twoSampleTests :: TestTree
 twoSampleTests = testGroup "two-sample" [
     testCase "identical distributions don't reject" $ do
-      let cfg = TS.config 0.0 1.0 1.0e-3 E.ons :: TS.Config E.ONS
+      let cfg = TS.config 0.0 1.0 1.0e-3 E.Ons
           rate = avgRate cfg 0.5 0.5 2000 100 33333
       assertBool ("FPR " ++ show rate) $ rate <= 0.05
   , testCase "different distributions reject" $ do
-      let cfg = TS.config 0.0 1.0 1.0e-3 E.ons :: TS.Config E.ONS
+      let cfg = TS.config 0.0 1.0 1.0e-3 E.Ons
           rate = avgRate cfg 0.3 0.7 5000 100 44444
       assertBool ("power " ++ show rate) $ rate >= 0.95
   ]
@@ -182,19 +181,17 @@ twoSampleTests = testGroup "two-sample" [
 bettorSmokeTests :: TestTree
 bettorSmokeTests = testGroup "bettor smoke" [
     testCase "fixed bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3
-                  (const (E.fixed 0.5)) :: M.Config ()
+      let cfg = M.config 0.5 0.0 1.0 1.0e-3 (E.Fixed 0.5)
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (M.update cfg) (M.initial cfg) xs
       assertBool "samples advanced" (M.samples st == 100)
   , testCase "ONS bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.ons :: M.Config E.ONS
+      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.Ons
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (M.update cfg) (M.initial cfg) xs
       assertBool "samples advanced" (M.samples st == 100)
   , testCase "aGRAPA bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.agrapa
-            :: M.Config E.AGRAPA
+      let cfg = M.config 0.5 0.0 1.0 1.0e-3 E.Agrapa
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (M.update cfg) (M.initial cfg) xs
       assertBool "samples advanced" (M.samples st == 100)

@@ -5,16 +5,13 @@ module Main where
 
 import Control.DeepSeq
 import qualified Statistics.EProcess as E
-import qualified Statistics.EProcess.Bettor as B
 import qualified Statistics.EProcess.Mean as M
 import qualified Statistics.EProcess.TwoSample as TS
 import Weigh
 
-instance NFData B.AGRAPA      where rnf !_ = ()
-instance NFData B.ONS         where rnf !_ = ()
-instance NFData (M.State s)   where rnf !_ = ()
-instance NFData (TS.State s)  where rnf !_ = ()
-instance NFData M.Verdict     where rnf !_ = ()
+instance NFData M.State    where rnf !_ = ()
+instance NFData TS.State   where rnf !_ = ()
+instance NFData M.Verdict  where rnf !_ = ()
 
 -- note that 'weigh' doesn't work properly in a repl
 main :: IO ()
@@ -26,12 +23,9 @@ main = mainWith $ do
 
 update :: Weigh ()
 update =
-  let !cfgF = M.config 0.5 0.0 1.0 1.0e-3 (const (E.fixed 0.5))
-                :: M.Config ()
-      !cfgA = M.config 0.5 0.0 1.0 1.0e-3 E.agrapa
-                :: M.Config B.AGRAPA
-      !cfgO = M.config 0.5 0.0 1.0 1.0e-3 E.ons
-                :: M.Config B.ONS
+  let !cfgF = M.config 0.5 0.0 1.0 1.0e-3 (E.Fixed 0.5)
+      !cfgA = M.config 0.5 0.0 1.0 1.0e-3 E.Agrapa
+      !cfgO = M.config 0.5 0.0 1.0 1.0e-3 E.Ons
       !stF  = M.initial cfgF
       !stA  = M.initial cfgA
       !stO  = M.initial cfgO
@@ -42,7 +36,7 @@ update =
 
 decide :: Weigh ()
 decide =
-  let !cfg = M.config 0.5 0.0 1.0 1.0e-3 E.ons :: M.Config B.ONS
+  let !cfg = M.config 0.5 0.0 1.0 1.0e-3 E.Ons
       !st  = M.initial cfg
   in  wgroup "Mean.decide" $ do
         func "initial state" (M.decide cfg) st
@@ -50,12 +44,9 @@ decide =
 stream :: Weigh ()
 stream =
   let !xs   = force (take 1000 (cycle [0.3, 0.7]))
-      !cfgF = M.config 0.5 0.0 1.0 1.0e-3 (const (E.fixed 0.5))
-                :: M.Config ()
-      !cfgA = M.config 0.5 0.0 1.0 1.0e-3 E.agrapa
-                :: M.Config B.AGRAPA
-      !cfgO = M.config 0.5 0.0 1.0 1.0e-3 E.ons
-                :: M.Config B.ONS
+      !cfgF = M.config 0.5 0.0 1.0 1.0e-3 (E.Fixed 0.5)
+      !cfgA = M.config 0.5 0.0 1.0 1.0e-3 E.Agrapa
+      !cfgO = M.config 0.5 0.0 1.0 1.0e-3 E.Ons
       runM cfg = foldl' (M.update cfg) (M.initial cfg)
   in  wgroup "Mean.update (1000-sample fold)" $ do
         func "fixed"  (runM cfgF) xs
@@ -65,12 +56,9 @@ stream =
 twosample :: Weigh ()
 twosample =
   let !ps   = force (take 1000 (cycle [(0.3, 0.7), (0.7, 0.3)]))
-      !cfgF = TS.config 0.0 1.0 1.0e-3 (const (E.fixed 0.5))
-                :: TS.Config ()
-      !cfgA = TS.config 0.0 1.0 1.0e-3 E.agrapa
-                :: TS.Config B.AGRAPA
-      !cfgO = TS.config 0.0 1.0 1.0e-3 E.ons
-                :: TS.Config B.ONS
+      !cfgF = TS.config 0.0 1.0 1.0e-3 (E.Fixed 0.5)
+      !cfgA = TS.config 0.0 1.0 1.0e-3 E.Agrapa
+      !cfgO = TS.config 0.0 1.0 1.0e-3 E.Ons
       runT cfg = foldl' (TS.update cfg) (TS.initial cfg)
   in  wgroup "TwoSample.update (1000-sample fold)" $ do
         func "fixed"  (runT cfgF) ps
