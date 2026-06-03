@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -- |
--- Module: Statistics.EProcess.Mean
+-- Module: Numeric.Eproc.Mean
 -- Copyright: (c) 2026 Jared Tobin
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
@@ -27,7 +27,7 @@
 -- probability of ever crossing the threshold is at most @alpha@,
 -- regardless of when the user decides to stop streaming samples.
 
-module Statistics.EProcess.Mean (
+module Numeric.Eproc.Mean (
   -- * Test configuration and state
     Config
   , State
@@ -47,7 +47,7 @@ module Statistics.EProcess.Mean (
   ) where
 
 import GHC.Exts (Double(D#))
-import Statistics.EProcess.Bettor
+import Numeric.Eproc.Bettor
 
 -- types ----------------------------------------------------------------------
 
@@ -197,7 +197,7 @@ step_bet b !lam_max !s !z = case b of
 --   @log(2 \/ alpha)@; the 2 is the Bonferroni union-bound
 --   adjustment for the two one-sided e-processes.
 --
---   >>> import qualified Statistics.EProcess.Bettor as B
+--   >>> import qualified Numeric.Eproc.Bettor as B
 --   >>> let cfg = config 0.5 0.0 1.0 1.0e-3 B.Ons
 config
   :: Double  -- ^ null mean @m@

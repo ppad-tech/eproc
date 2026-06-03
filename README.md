@@ -17,8 +17,8 @@ A sample GHCi session:
 
 ```
   > -- import qualified
-  > import qualified Statistics.EProcess.Bettor as B
-  > import qualified Statistics.EProcess.Mean as M
+  > import qualified Numeric.Eproc.Bettor as B
+  > import qualified Numeric.Eproc.Mean as M
   >
   > -- test H_0: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3,
   > -- with the ONS bettor
@@ -46,7 +46,7 @@ A sample GHCi session:
 ```
 
 For the paired two-sample mean-equality test, see
-`Statistics.EProcess.TwoSample`.
+`Numeric.Eproc.TwoSample`.
 
 ## Documentation
 

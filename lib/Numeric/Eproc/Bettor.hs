@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- |
--- Module: Statistics.EProcess.Bettor
+-- Module: Numeric.Eproc.Bettor
 -- Copyright: (c) 2026 Jared Tobin
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
@@ -22,7 +22,7 @@
 -- under @H_0@, so that Ville's inequality applies and the resulting
 -- test is anytime-valid.
 
-module Statistics.EProcess.Bettor (
+module Numeric.Eproc.Bettor (
   -- * Bettor strategies
     Bettor(..)
   ) where
@@ -34,13 +34,13 @@ module Statistics.EProcess.Bettor (
 --   For 'Agrapa' and 'Ons', a per-direction safe-bet ceiling
 --   @lambda_max@ is derived from the sample bounds supplied to the
 --   surrounding test configuration (e.g.
---   'Statistics.EProcess.Mean.config') -- bets get clipped to
+--   'Numeric.Eproc.Mean.config') -- bets get clipped to
 --   @[0, lambda_max]@ so that the wealth factor @1 + lambda * z@
 --   stays nonnegative for every admissible observation.
 --
 --   * 'Fixed' always bets the supplied constant @lambda@. The wager
 --     does not respond to observed data; this strategy is useful only
---     as a baseline or for smoke testing the framework.
+--     as a baseline.
 --
 --   * 'Agrapa' is the aGRAPA (approximate growth-rate adaptive
 --     predictable plug-in) bettor of Waudby-Smith & Ramdas (2024).
@@ -55,13 +55,6 @@ module Statistics.EProcess.Bettor (
 --     to scale the update. Achieves logarithmic regret against the
 --     best constant bet in hindsight and is in practice the strongest
 --     of the three bettors under most signal regimes.
---
---   >>> Fixed 0.5
---   Fixed 0.5
---   >>> Agrapa
---   Agrapa
---   >>> Ons
---   Ons
 data Bettor =
     Fixed {-# UNPACK #-} !Double
   | Agrapa

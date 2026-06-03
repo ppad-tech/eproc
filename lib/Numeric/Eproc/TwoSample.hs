@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- |
--- Module: Statistics.EProcess.TwoSample
+-- Module: Numeric.Eproc.TwoSample
 -- Copyright: (c) 2026 Jared Tobin
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
@@ -16,7 +16,7 @@
 -- The reduction is straightforward: under the null, the differences
 -- @d_t = a_t - b_t@ have mean zero, and differences of @[lo, hi]@
 -- values lie in @[lo - hi, hi - lo]@. So the paired test is just
--- the bounded-mean test ("Statistics.EProcess.Mean") on @d_t@ with
+-- the bounded-mean test ("Numeric.Eproc.Mean") on @d_t@ with
 -- null mean @0@ and sample bounds @[lo - hi, hi - lo]@.
 --
 -- Pairing is required: independent two-sample testing without
@@ -24,7 +24,7 @@
 -- joint distribution rather than the marginal difference) and is
 -- beyond the scope of this module.
 
-module Statistics.EProcess.TwoSample (
+module Numeric.Eproc.TwoSample (
   -- * Test configuration and state
     Config
   , State
@@ -43,14 +43,14 @@ module Statistics.EProcess.TwoSample (
   , samples
   ) where
 
-import qualified Statistics.EProcess.Mean as M
-import Statistics.EProcess.Mean (Verdict(..))
-import Statistics.EProcess.Bettor (Bettor)
+import qualified Numeric.Eproc.Mean as M
+import Numeric.Eproc.Mean (Verdict(..))
+import Numeric.Eproc.Bettor (Bettor)
 
 -- types ----------------------------------------------------------------------
 
 -- | Paired two-sample test configuration. Build with 'config'. Wraps
---   a 'Statistics.EProcess.Mean.Config' for the underlying
+--   a 'Numeric.Eproc.Mean.Config' for the underlying
 --   difference test.
 newtype Config = Config M.Config
 
@@ -67,7 +67,7 @@ newtype State = State M.State
 --   on the differences, which lie in @[lo - hi, hi - lo]@ with null
 --   mean @0@.
 --
---   >>> import qualified Statistics.EProcess.Bettor as B
+--   >>> import qualified Numeric.Eproc.Bettor as B
 --   >>> let cfg = config 0.0 1.0 1.0e-3 B.Ons
 config
   :: Double  -- ^ sample lower bound @lo@

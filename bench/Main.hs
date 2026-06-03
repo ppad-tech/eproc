@@ -4,9 +4,9 @@
 module Main where
 
 import Control.DeepSeq
-import qualified Statistics.EProcess.Bettor as B
-import qualified Statistics.EProcess.Mean as M
-import qualified Statistics.EProcess.TwoSample as TS
+import qualified Numeric.Eproc.Bettor as B
+import qualified Numeric.Eproc.Mean as M
+import qualified Numeric.Eproc.TwoSample as TS
 import Criterion.Main
 
 -- all relevant fields are strict (and UNPACK'd for the doubles), so

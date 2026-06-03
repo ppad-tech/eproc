@@ -34,9 +34,9 @@ library
   if flag(llvm)
     ghc-options: -fllvm -O2
   exposed-modules:
-      Statistics.EProcess.Bettor
-      Statistics.EProcess.Mean
-      Statistics.EProcess.TwoSample
+      Numeric.Eproc.Bettor
+      Numeric.Eproc.Mean
+      Numeric.Eproc.TwoSample
   build-depends:
       base >= 4.9 && < 5
 
