@@ -17,12 +17,11 @@ A sample GHCi session:
 
 ```
   > -- import qualified
-  > import qualified Numeric.Eproc.Bettor as B
   > import qualified Numeric.Eproc.Bounded as Bounded
   >
   > -- test H_0: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3,
   > -- with the ONS bettor
-  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
+  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
   >
   > -- streaming interface: 'initial' then fold observations through 'update'
   > let s0 = Bounded.initial cfg
@@ -113,7 +112,7 @@ to get a REPL for the main library.
 ## References
 
 - Waudby-Smith & Ramdas (2024), "[Estimating means of bounded random
-  variables by betting][wsr24]." JRSS-B.
+  variables by betting][wsr24]." JRSS-Bounded.
 - Ramdas, Grunwald, Vovk, Shafer (2023), "[Game-theoretic statistics
   and safe anytime-valid inference][rgvs23]." Statistical Science.
 - Shafer (2021), "[Testing by betting][shafer21]." JRSS-A.

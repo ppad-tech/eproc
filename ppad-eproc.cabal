@@ -34,7 +34,6 @@ library
   if flag(llvm)
     ghc-options: -fllvm -O2
   exposed-modules:
-      Numeric.Eproc.Bettor
       Numeric.Eproc.Bounded
       Numeric.Eproc.Paired
   build-depends:

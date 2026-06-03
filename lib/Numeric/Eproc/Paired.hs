@@ -30,6 +30,9 @@ module Numeric.Eproc.Paired (
   , State
   , Verdict(..)
 
+  -- * Bettor strategies
+  , Bettor(..)
+
   -- * Construction
   , config
   , initial
@@ -44,8 +47,7 @@ module Numeric.Eproc.Paired (
   ) where
 
 import qualified Numeric.Eproc.Bounded as Bounded
-import Numeric.Eproc.Bounded (Verdict(..))
-import Numeric.Eproc.Bettor (Bettor)
+import Numeric.Eproc.Bounded (Verdict(..), Bettor(..))
 
 -- types ----------------------------------------------------------------------
 
@@ -67,8 +69,7 @@ newtype State = State Bounded.State
 --   on the differences, which lie in @[lo - hi, hi - lo]@ with null
 --   mean @0@.
 --
---   >>> import qualified Numeric.Eproc.Bettor as B
---   >>> let cfg = config 0.0 1.0 1.0e-3 B.Ons
+--   >>> let cfg = config 0.0 1.0 1.0e-3 Ons
 config
   :: Double  -- ^ sample lower bound @lo@
   -> Double  -- ^ sample upper bound @hi@
