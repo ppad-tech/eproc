@@ -35,7 +35,7 @@ library
     ghc-options: -fllvm -O2
   exposed-modules:
       Numeric.Eproc.Bettor
-      Numeric.Eproc.Mean
+      Numeric.Eproc.Bounded
       Numeric.Eproc.Paired
   build-depends:
       base >= 4.9 && < 5

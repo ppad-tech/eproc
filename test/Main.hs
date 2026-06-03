@@ -5,7 +5,7 @@ module Main where
 import Data.Bits
 import Data.Word
 import qualified Numeric.Eproc.Bettor as B
-import qualified Numeric.Eproc.Mean as M
+import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Paired as P
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -53,26 +53,26 @@ gen_seq g = let (_, g') = step_gen g in g : gen_seq g'
 -- run a sequential mean test on a stream of n bernoulli(p) samples,
 -- with the early-stopping rule built in. returns (verdict, samples
 -- consumed).
-run_mean_bernoulli
-  :: M.Config
+run_bounded_bernoulli
+  :: Bounded.Config
   -> Double           -- ^ p
   -> Int              -- ^ budget
   -> Gen
-  -> (M.Verdict, Int)
-run_mean_bernoulli cfg p budget g0 = go 0 g0 (M.initial cfg)
+  -> (Bounded.Verdict, Int)
+run_bounded_bernoulli cfg p budget g0 = go 0 g0 (Bounded.initial cfg)
   where
     go !n !g !st
-      | n >= budget = (M.decide cfg st, n)
-      | otherwise = case M.decide cfg st of
-          M.Reject -> (M.Reject, n)
-          M.Continue ->
+      | n >= budget = (Bounded.decide cfg st, n)
+      | otherwise = case Bounded.decide cfg st of
+          Bounded.Reject -> (Bounded.Reject, n)
+          Bounded.Continue ->
             let (x, g') = bernoulli p g
-                st' = M.update cfg st x
+                st' = Bounded.update cfg st x
             in  go (n + 1) g' st'
 
 -- fraction of trials that rejected.
 rejection_rate
-  :: M.Config
+  :: Bounded.Config
   -> Double           -- ^ true bernoulli p
   -> Int              -- ^ budget per trial
   -> Int              -- ^ number of trials
@@ -82,8 +82,8 @@ rejection_rate cfg p budget trials seed =
   let gens = take trials (gen_seq (mk_gen seed))
       rejects = length
         [ () | g <- gens
-             , let (v, _) = run_mean_bernoulli cfg p budget g
-             , v == M.Reject ]
+             , let (v, _) = run_bounded_bernoulli cfg p budget g
+             , v == Bounded.Reject ]
   in  fromIntegral rejects / fromIntegral trials
 
 run_paired
@@ -98,8 +98,8 @@ run_paired cfg pa pb budget g0 = go 0 g0 (P.initial cfg)
     go !n !g !st
       | n >= budget = (P.decide cfg st, n)
       | otherwise = case P.decide cfg st of
-          M.Reject -> (M.Reject, n)
-          M.Continue ->
+          Bounded.Reject -> (Bounded.Reject, n)
+          Bounded.Continue ->
             let (a, g1) = bernoulli pa g
                 (b, g2) = bernoulli pb g1
                 st' = P.update cfg st (a, b)
@@ -118,7 +118,7 @@ paired_avg_rate cfg pa pb budget trials seed =
       rejects = length
         [ () | g <- gens
              , let (v, _) = run_paired cfg pa pb budget g
-             , v == M.Reject ]
+             , v == Bounded.Reject ]
   in  fromIntegral rejects / fromIntegral trials
 
 -- sanity ---------------------------------------------------------------------
@@ -127,13 +127,13 @@ paired_avg_rate cfg pa pb budget trials seed =
 sanity_tests :: TestTree
 sanity_tests = testGroup "sanity" [
     testCase "degenerate input never rejects" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-6 B.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 B.Ons
           xs = replicate 5000 0.5
-          st = foldl' (M.update cfg) (M.initial cfg) xs
-      M.decide cfg st @?= M.Continue
+          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+      Bounded.decide cfg st @?= Bounded.Continue
   , testCase "two-sided thresholds applied symmetrically" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-6 B.Ons
-      M.decide cfg (M.initial cfg) @?= M.Continue
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 B.Ons
+      Bounded.decide cfg (Bounded.initial cfg) @?= Bounded.Continue
   ]
 
 -- null calibration -----------------------------------------------------------
@@ -144,14 +144,14 @@ sanity_tests = testGroup "sanity" [
 calibration_tests :: TestTree
 calibration_tests = testGroup "null calibration" [
     testCase "ONS, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = M.config 0.5 0.0 1.0 0.05 B.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 0.05 B.Ons
           rate = rejection_rate cfg 0.5 2000 200 12345
       -- expected rate <= 0.05; allow up to 0.10 slack for sampling
       -- variability over 200 trials.
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
   , testCase "aGRAPA, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = M.config 0.5 0.0 1.0 0.05 B.Agrapa
+      let cfg = Bounded.config 0.5 0.0 1.0 0.05 B.Agrapa
           rate = rejection_rate cfg 0.5 2000 200 67890
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
@@ -163,12 +163,12 @@ calibration_tests = testGroup "null calibration" [
 power_tests :: TestTree
 power_tests = testGroup "power" [
     testCase "ONS detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
           rate = rejection_rate cfg 0.7 5000 100 11111
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
   , testCase "aGRAPA detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
           rate = rejection_rate cfg 0.7 5000 100 22222
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
@@ -195,18 +195,18 @@ two_sample_tests = testGroup "two-sample" [
 bettor_smoke_tests :: TestTree
 bettor_smoke_tests = testGroup "bettor smoke" [
     testCase "fixed bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (M.update cfg) (M.initial cfg) xs
-      assertBool "samples advanced" (M.samples st == 100)
+          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+      assertBool "samples advanced" (Bounded.samples st == 100)
   , testCase "ONS bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (M.update cfg) (M.initial cfg) xs
-      assertBool "samples advanced" (M.samples st == 100)
+          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+      assertBool "samples advanced" (Bounded.samples st == 100)
   , testCase "aGRAPA bettor runs without error" $ do
-      let cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (M.update cfg) (M.initial cfg) xs
-      assertBool "samples advanced" (M.samples st == 100)
+          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+      assertBool "samples advanced" (Bounded.samples st == 100)
   ]

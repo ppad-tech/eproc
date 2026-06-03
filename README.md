@@ -18,30 +18,30 @@ A sample GHCi session:
 ```
   > -- import qualified
   > import qualified Numeric.Eproc.Bettor as B
-  > import qualified Numeric.Eproc.Mean as M
+  > import qualified Numeric.Eproc.Bounded as Bounded
   >
   > -- test H_0: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3,
   > -- with the ONS bettor
-  > let cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
+  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
   >
   > -- streaming interface: 'initial' then fold observations through 'update'
-  > let s0 = M.initial cfg
+  > let s0 = Bounded.initial cfg
   > let xs = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]  -- mean 0.8, drifts from H_0
-  > let s10 = foldl (M.update cfg) s0 xs
+  > let s10 = foldl (Bounded.update cfg) s0 xs
   >
   > -- inspect wealth and verdict at any point
-  > M.samples s10
+  > Bounded.samples s10
   10
-  > M.log_wealth s10
+  > Bounded.log_wealth s10
   0.7182493502552663
-  > M.decide cfg s10
+  > Bounded.decide cfg s10
   Continue
   >
   > -- with enough evidence the test rejects
-  > let s300 = foldl (M.update cfg) s0 (concat (replicate 30 xs))
-  > M.log_wealth s300
+  > let s300 = foldl (Bounded.update cfg) s0 (concat (replicate 30 xs))
+  > Bounded.log_wealth s300
   53.092214534054165
-  > M.decide cfg s300
+  > Bounded.decide cfg s300
   Reject
 ```
 
@@ -62,25 +62,25 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
 `cabal bench` to run the benchmark suite):
 
 ```
-  benchmarking Mean.update (one step)/ons
+  benchmarking Bounded.update (one step)/ons
   time                 13.05 ns   (12.95 ns .. 13.17 ns)
                        1.000 R²   (0.999 R² .. 1.000 R²)
   mean                 13.03 ns   (12.95 ns .. 13.15 ns)
   std dev              314.0 ps   (248.3 ps .. 422.3 ps)
 
-  benchmarking Mean.update (1000-sample fold)/fixed
+  benchmarking Bounded.update (1000-sample fold)/fixed
   time                 4.840 μs   (4.819 μs .. 4.867 μs)
                        1.000 R²   (1.000 R² .. 1.000 R²)
   mean                 4.828 μs   (4.817 μs .. 4.847 μs)
   std dev              44.90 ns   (30.94 ns .. 61.54 ns)
 
-  benchmarking Mean.update (1000-sample fold)/agrapa
+  benchmarking Bounded.update (1000-sample fold)/agrapa
   time                 15.67 μs   (15.66 μs .. 15.69 μs)
                        1.000 R²   (1.000 R² .. 1.000 R²)
   mean                 15.67 μs   (15.65 μs .. 15.69 μs)
   std dev              63.74 ns   (55.65 ns .. 75.07 ns)
 
-  benchmarking Mean.update (1000-sample fold)/ons
+  benchmarking Bounded.update (1000-sample fold)/ons
   time                 14.43 μs   (14.42 μs .. 14.44 μs)
                        1.000 R²   (1.000 R² .. 1.000 R²)
   mean                 14.43 μs   (14.42 μs .. 14.44 μs)

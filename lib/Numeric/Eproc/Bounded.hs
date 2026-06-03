@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -- |
--- Module: Numeric.Eproc.Mean
+-- Module: Numeric.Eproc.Bounded
 -- Copyright: (c) 2026 Jared Tobin
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
@@ -27,7 +27,7 @@
 -- probability of ever crossing the threshold is at most @alpha@,
 -- regardless of when the user decides to stop streaming samples.
 
-module Numeric.Eproc.Mean (
+module Numeric.Eproc.Bounded (
   -- * Test configuration and state
     Config
   , State

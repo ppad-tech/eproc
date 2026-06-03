@@ -16,7 +16,7 @@
 -- The reduction is straightforward: under the null, the differences
 -- @d_t = a_t - b_t@ have mean zero, and differences of @[lo, hi]@
 -- values lie in @[lo - hi, hi - lo]@. So the paired test is just
--- the bounded-mean test ("Numeric.Eproc.Mean") on @d_t@ with
+-- the bounded-mean test ("Numeric.Eproc.Bounded") on @d_t@ with
 -- null mean @0@ and sample bounds @[lo - hi, hi - lo]@.
 --
 -- Pairing is required: independent two-sample testing without
@@ -43,20 +43,20 @@ module Numeric.Eproc.Paired (
   , samples
   ) where
 
-import qualified Numeric.Eproc.Mean as M
-import Numeric.Eproc.Mean (Verdict(..))
+import qualified Numeric.Eproc.Bounded as Bounded
+import Numeric.Eproc.Bounded (Verdict(..))
 import Numeric.Eproc.Bettor (Bettor)
 
 -- types ----------------------------------------------------------------------
 
 -- | Paired two-sample test configuration. Build with 'config'. Wraps
---   a 'Numeric.Eproc.Mean.Config' for the underlying
+--   a 'Numeric.Eproc.Bounded.Config' for the underlying
 --   difference test.
-newtype Config = Config M.Config
+newtype Config = Config Bounded.Config
 
 -- | Streaming paired two-sample test state. Construct with 'initial'
 --   and fold paired observations through 'update'.
-newtype State = State M.State
+newtype State = State Bounded.State
 
 -- construction ---------------------------------------------------------------
 
@@ -77,14 +77,14 @@ config
   -> Config
 config !lo !hi !alpha b =
   let !d = hi - lo
-  in  Config (M.config 0 (negate d) d alpha b)
+  in  Config (Bounded.config 0 (negate d) d alpha b)
 {-# INLINE config #-}
 
 -- | The initial 'State' for a fresh streaming test.
 --
 --   >>> let s0 = initial cfg
 initial :: Config -> State
-initial (Config c) = State (M.initial c)
+initial (Config c) = State (Bounded.initial c)
 {-# INLINE initial #-}
 
 -- streaming ------------------------------------------------------------------
@@ -97,7 +97,7 @@ initial (Config c) = State (M.initial c)
 --   >>> let s1 = update cfg s0 (0.3, 0.7)
 update :: Config -> State -> (Double, Double) -> State
 update (Config c) (State s) (!a, !b) =
-  State (M.update c s (a - b))
+  State (Bounded.update c s (a - b))
 {-# INLINE update #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
@@ -109,7 +109,7 @@ update (Config c) (State s) (!a, !b) =
 --   >>> decide cfg s0
 --   Continue
 decide :: Config -> State -> Verdict
-decide (Config c) (State s) = M.decide c s
+decide (Config c) (State s) = Bounded.decide c s
 {-# INLINE decide #-}
 
 -- inspection -----------------------------------------------------------------
@@ -120,7 +120,7 @@ decide (Config c) (State s) = M.decide c s
 --   >>> log_wealth s0
 --   0.0
 log_wealth :: State -> Double
-log_wealth (State s) = M.log_wealth s
+log_wealth (State s) = Bounded.log_wealth s
 {-# INLINE log_wealth #-}
 
 -- | The number of paired observations consumed so far.
@@ -128,5 +128,5 @@ log_wealth (State s) = M.log_wealth s
 --   >>> samples s0
 --   0
 samples :: State -> Int
-samples (State s) = M.samples s
+samples (State s) = Bounded.samples s
 {-# INLINE samples #-}

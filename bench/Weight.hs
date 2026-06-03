@@ -5,13 +5,13 @@ module Main where
 
 import Control.DeepSeq
 import qualified Numeric.Eproc.Bettor as B
-import qualified Numeric.Eproc.Mean as M
+import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Paired as P
 import Weigh
 
-instance NFData M.State    where rnf !_ = ()
+instance NFData Bounded.State    where rnf !_ = ()
 instance NFData P.State   where rnf !_ = ()
-instance NFData M.Verdict  where rnf !_ = ()
+instance NFData Bounded.Verdict  where rnf !_ = ()
 
 -- note that 'weigh' doesn't work properly in a repl
 main :: IO ()
@@ -23,32 +23,32 @@ main = mainWith $ do
 
 update :: Weigh ()
 update =
-  let !cfg_f = M.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
-      !cfg_a = M.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
-      !cfg_o = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
-      !st_f  = M.initial cfg_f
-      !st_a  = M.initial cfg_a
-      !st_o  = M.initial cfg_o
-  in  wgroup "Mean.update (one step)" $ do
-        func "fixed"  (M.update cfg_f st_f) 0.7
-        func "agrapa" (M.update cfg_a st_a) 0.7
-        func "ons"    (M.update cfg_o st_o) 0.7
+  let !cfg_f = Bounded.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
+      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
+      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
+      !st_f  = Bounded.initial cfg_f
+      !st_a  = Bounded.initial cfg_a
+      !st_o  = Bounded.initial cfg_o
+  in  wgroup "Bounded.update (one step)" $ do
+        func "fixed"  (Bounded.update cfg_f st_f) 0.7
+        func "agrapa" (Bounded.update cfg_a st_a) 0.7
+        func "ons"    (Bounded.update cfg_o st_o) 0.7
 
 decide :: Weigh ()
 decide =
-  let !cfg = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
-      !st  = M.initial cfg
-  in  wgroup "Mean.decide" $ do
-        func "initial state" (M.decide cfg) st
+  let !cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
+      !st  = Bounded.initial cfg
+  in  wgroup "Bounded.decide" $ do
+        func "initial state" (Bounded.decide cfg) st
 
 stream :: Weigh ()
 stream =
   let !xs    = force (take 1000 (cycle [0.3, 0.7]))
-      !cfg_f = M.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
-      !cfg_a = M.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
-      !cfg_o = M.config 0.5 0.0 1.0 1.0e-3 B.Ons
-      run_m cfg = foldl' (M.update cfg) (M.initial cfg)
-  in  wgroup "Mean.update (1000-sample fold)" $ do
+      !cfg_f = Bounded.config 0.5 0.0 1.0 1.0e-3 (B.Fixed 0.5)
+      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Agrapa
+      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 B.Ons
+      run_m cfg = foldl' (Bounded.update cfg) (Bounded.initial cfg)
+  in  wgroup "Bounded.update (1000-sample fold)" $ do
         func "fixed"  (run_m cfg_f) xs
         func "agrapa" (run_m cfg_a) xs
         func "ons"    (run_m cfg_o) xs

@@ -34,7 +34,7 @@ module Numeric.Eproc.Bettor (
 --   For 'Agrapa' and 'Ons', a per-direction safe-bet ceiling
 --   @lambda_max@ is derived from the sample bounds supplied to the
 --   surrounding test configuration (e.g.
---   'Numeric.Eproc.Mean.config') -- bets get clipped to
+--   'Numeric.Eproc.Bounded.config') -- bets get clipped to
 --   @[0, lambda_max]@ so that the wealth factor @1 + lambda * z@
 --   stays nonnegative for every admissible observation.
 --
