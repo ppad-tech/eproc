@@ -6,7 +6,7 @@ import Data.Bits
 import Data.Word
 import qualified Numeric.Eproc.Bettor as B
 import qualified Numeric.Eproc.Mean as M
-import qualified Numeric.Eproc.Test as T
+import qualified Numeric.Eproc.Paired as P
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -87,26 +87,26 @@ rejection_rate cfg p budget trials seed =
   in  fromIntegral rejects / fromIntegral trials
 
 run_paired
-  :: T.Config
+  :: P.Config
   -> Double
   -> Double           -- ^ p for A and B
   -> Int
   -> Gen
-  -> (T.Verdict, Int)
-run_paired cfg pa pb budget g0 = go 0 g0 (T.initial cfg)
+  -> (P.Verdict, Int)
+run_paired cfg pa pb budget g0 = go 0 g0 (P.initial cfg)
   where
     go !n !g !st
-      | n >= budget = (T.decide cfg st, n)
-      | otherwise = case T.decide cfg st of
+      | n >= budget = (P.decide cfg st, n)
+      | otherwise = case P.decide cfg st of
           M.Reject -> (M.Reject, n)
           M.Continue ->
             let (a, g1) = bernoulli pa g
                 (b, g2) = bernoulli pb g1
-                st' = T.update cfg st (a, b)
+                st' = P.update cfg st (a, b)
             in  go (n + 1) g2 st'
 
 paired_avg_rate
-  :: T.Config
+  :: P.Config
   -> Double
   -> Double
   -> Int
@@ -179,11 +179,11 @@ power_tests = testGroup "power" [
 two_sample_tests :: TestTree
 two_sample_tests = testGroup "two-sample" [
     testCase "identical distributions don't reject" $ do
-      let cfg = T.config 0.0 1.0 1.0e-3 B.Ons
+      let cfg = P.config 0.0 1.0 1.0e-3 B.Ons
           rate = paired_avg_rate cfg 0.5 0.5 2000 100 33333
       assertBool ("FPR " ++ show rate) $ rate <= 0.05
   , testCase "different distributions reject" $ do
-      let cfg = T.config 0.0 1.0 1.0e-3 B.Ons
+      let cfg = P.config 0.0 1.0 1.0e-3 B.Ons
           rate = paired_avg_rate cfg 0.3 0.7 5000 100 44444
       assertBool ("power " ++ show rate) $ rate >= 0.95
   ]

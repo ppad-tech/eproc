@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- |
--- Module: Numeric.Eproc.Test
+-- Module: Numeric.Eproc.Paired
 -- Copyright: (c) 2026 Jared Tobin
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
@@ -24,7 +24,7 @@
 -- joint distribution rather than the marginal difference) and is
 -- beyond the scope of this module.
 
-module Numeric.Eproc.Test (
+module Numeric.Eproc.Paired (
   -- * Test configuration and state
     Config
   , State

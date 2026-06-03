@@ -6,11 +6,11 @@ module Main where
 import Control.DeepSeq
 import qualified Numeric.Eproc.Bettor as B
 import qualified Numeric.Eproc.Mean as M
-import qualified Numeric.Eproc.Test as T
+import qualified Numeric.Eproc.Paired as P
 import Weigh
 
 instance NFData M.State    where rnf !_ = ()
-instance NFData T.State   where rnf !_ = ()
+instance NFData P.State   where rnf !_ = ()
 instance NFData M.Verdict  where rnf !_ = ()
 
 -- note that 'weigh' doesn't work properly in a repl
@@ -56,11 +56,11 @@ stream =
 twosample :: Weigh ()
 twosample =
   let !ps    = force (take 1000 (cycle [(0.3, 0.7), (0.7, 0.3)]))
-      !cfg_f = T.config 0.0 1.0 1.0e-3 (B.Fixed 0.5)
-      !cfg_a = T.config 0.0 1.0 1.0e-3 B.Agrapa
-      !cfg_o = T.config 0.0 1.0 1.0e-3 B.Ons
-      run_t cfg = foldl' (T.update cfg) (T.initial cfg)
-  in  wgroup "Test.update (1000-sample fold)" $ do
+      !cfg_f = P.config 0.0 1.0 1.0e-3 (B.Fixed 0.5)
+      !cfg_a = P.config 0.0 1.0 1.0e-3 B.Agrapa
+      !cfg_o = P.config 0.0 1.0 1.0e-3 B.Ons
+      run_t cfg = foldl' (P.update cfg) (P.initial cfg)
+  in  wgroup "Paired.update (1000-sample fold)" $ do
         func "fixed"  (run_t cfg_f) ps
         func "agrapa" (run_t cfg_a) ps
         func "ons"    (run_t cfg_o) ps

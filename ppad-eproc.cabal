@@ -36,7 +36,7 @@ library
   exposed-modules:
       Numeric.Eproc.Bettor
       Numeric.Eproc.Mean
-      Numeric.Eproc.Test
+      Numeric.Eproc.Paired
   build-depends:
       base >= 4.9 && < 5
 
