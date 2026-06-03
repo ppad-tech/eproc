@@ -1,4 +1,4 @@
-# eproc
+# ppad-eproc
 
 [![](https://img.shields.io/hackage/v/ppad-eproc?color=blue)](https://hackage.haskell.org/package/ppad-eproc)
 ![](https://img.shields.io/badge/license-MIT-brightgreen)
@@ -6,46 +6,37 @@
 
 Anytime-valid sequential hypothesis testing for bounded random
 variables, via the e-process / betting framework of
-[Waudby-Smith & Ramdas (2024)][wsr24]. Bounded-mean and paired
-two-sample tests are valid under optional stopping: reject as soon as
-the wealth process exceeds `1/alpha`, with type-I error controlled at
-`alpha` regardless of when the user stops streaming samples.
+[Waudby-Smith & Ramdas (2024)][wsr24].
 
 ## Usage
 
 A sample GHCi session:
 
 ```
-  > -- import qualified
   > import qualified Numeric.Eproc.Bounded as Bounded
   >
-  > -- test H_0: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3,
+  > -- hypothesis: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3, tested
   > -- with the ONS bettor
   > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+  > let s0  = Bounded.initial cfg
   >
-  > -- streaming interface: 'initial' then fold observations through 'update'
-  > let s0 = Bounded.initial cfg
-  > let xs = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]  -- mean 0.8, drifts from H_0
-  > let s10 = foldl (Bounded.update cfg) s0 xs
+  > -- ten observations (drifting from hypothesis), and state afterwards
+  > let xs  = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]
+  > let s10 = foldl' (Bounded.update cfg) s0 xs
   >
-  > -- inspect wealth and verdict at any point
-  > Bounded.samples s10
-  10
+  > -- inspect wealth and stopping decision at any point
   > Bounded.log_wealth s10
   0.7182493502552663
   > Bounded.decide cfg s10
   Continue
   >
-  > -- with enough evidence the test rejects
-  > let s300 = foldl (Bounded.update cfg) s0 (concat (replicate 30 xs))
+  > -- with enough evidence, the hypothesis is rejected
+  > let s300 = foldl' (Bounded.update cfg) s0 (concat (replicate 30 xs))
   > Bounded.log_wealth s300
   53.092214534054165
   > Bounded.decide cfg s300
   Reject
 ```
-
-For the paired two-sample mean-equality test, see
-`Numeric.Eproc.Paired`.
 
 ## Documentation
 
@@ -85,10 +76,6 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
   mean                 14.43 μs   (14.42 μs .. 14.44 μs)
   std dev              46.74 ns   (34.00 ns .. 64.63 ns)
 ```
-
-The inner update loop is fully fused: the `fixed` bettor allocates
-nothing per step, and the `agrapa` and `ons` bettors allocate a small
-constant per-step state record.
 
 You should compile with the `llvm` flag for maximum performance.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-- 0.1.0 (2026-05-31)
-  * Initial release. Anytime-valid sequential testing via
+- 0.1.0 (2026-06-03)
+  * Initial release, supporting anytime-valid sequential testing via
     e-processes: bounded-mean and paired two-sample tests, with
     fixed-lambda, aGRAPA, and ONS bettors.

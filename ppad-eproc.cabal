@@ -14,8 +14,7 @@ description:
   Anytime-valid sequential hypothesis testing for bounded random
   variables, via the e-process / betting framework of Waudby-Smith and
   Ramdas (2024). Provides bounded-mean and paired two-sample tests
-  with fixed-lambda, aGRAPA, and ONS bettors. Tests are valid under
-  optional stopping.
+  with fixed-lambda, aGRAPA, and ONS bettors.
 
 flag llvm
   description: Use GHC's LLVM backend.
