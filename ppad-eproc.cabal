@@ -1,7 +1,7 @@
 cabal-version:      3.0
 name:               ppad-eproc
 version:            0.1.0
-synopsis:           Anytime-valid sequential testing via e-processes
+synopsis:           Anytime-valid sequential testing via e-processes.
 license:            MIT
 license-file:       LICENSE
 author:             Jared Tobin
@@ -34,7 +34,6 @@ library
   if flag(llvm)
     ghc-options: -fllvm -O2
   exposed-modules:
-      Statistics.EProcess
       Statistics.EProcess.Bettor
       Statistics.EProcess.Mean
       Statistics.EProcess.TwoSample
