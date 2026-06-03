@@ -10,9 +10,19 @@
 -- Paired two-sample anytime-valid mean-equality test.
 --
 -- For paired observations @(a_t, b_t)@ where both samples lie in
--- @[lo, hi]@, tests @H_0: E[a] = E[b]@ against @H_1: E[a] /= E[b]@ by
--- running the bounded-mean test on the differences @d_t = a_t - b_t@
--- with null mean 0.
+-- @[lo, hi]@, tests @H_0: E[a] = E[b]@ against
+-- @H_1: E[a] /= E[b]@.
+--
+-- The reduction is straightforward: under the null, the differences
+-- @d_t = a_t - b_t@ have mean zero, and differences of @[lo, hi]@
+-- values lie in @[lo - hi, hi - lo]@. So the paired test is just
+-- the bounded-mean test ("Statistics.EProcess.Mean") on @d_t@ with
+-- null mean @0@ and sample bounds @[lo - hi, hi - lo]@.
+--
+-- Pairing is required: independent two-sample testing without
+-- alignment would need to bet against a richer alternative (the
+-- joint distribution rather than the marginal difference) and is
+-- beyond the scope of this module.
 
 module Statistics.EProcess.TwoSample (
   -- * Test configuration and state
@@ -39,11 +49,13 @@ import Statistics.EProcess.Bettor (Bettor)
 
 -- types ----------------------------------------------------------------------
 
--- | Paired two-sample test configuration. Build with 'config'.
+-- | Paired two-sample test configuration. Build with 'config'. Wraps
+--   a 'Statistics.EProcess.Mean.Config' for the underlying
+--   difference test.
 newtype Config = Config M.Config
 
 -- | Streaming paired two-sample test state. Construct with 'initial'
---   and fold observations through 'update'.
+--   and fold paired observations through 'update'.
 newtype State = State M.State
 
 -- construction ---------------------------------------------------------------
@@ -51,7 +63,9 @@ newtype State = State M.State
 -- | Build a 'Config' for the paired two-sample test.
 --
 --   Bounds @lo@ and @hi@ are the (shared) bounds on the individual
---   samples; differences then lie in @[lo - hi, hi - lo]@.
+--   @a@ and @b@ samples; the underlying mean test is then configured
+--   on the differences, which lie in @[lo - hi, hi - lo]@ with null
+--   mean @0@.
 --
 --   >>> import qualified Statistics.EProcess.Bettor as B
 --   >>> let cfg = config 0.0 1.0 1.0e-3 B.Ons
@@ -77,6 +91,9 @@ initial (Config c) = State (M.initial c)
 
 -- | Fold one paired observation @(a, b)@ into the running 'State'.
 --
+--   Equivalent to feeding the difference @a - b@ into the underlying
+--   bounded-mean test.
+--
 --   >>> let s1 = update cfg s0 (0.3, 0.7)
 update :: Config -> State -> (Double, Double) -> State
 update (Config c) (State s) (!a, !b) =
@@ -84,6 +101,10 @@ update (Config c) (State s) (!a, !b) =
 {-# INLINE update #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
+--
+--   'Reject' iff either directional log-wealth of the underlying
+--   bounded-mean test on the differences has crossed
+--   @log(2 \/ alpha)@.
 --
 --   >>> decide cfg s0
 --   Continue
@@ -93,7 +114,8 @@ decide (Config c) (State s) = M.decide c s
 
 -- inspection -----------------------------------------------------------------
 
--- | The current log-wealth.
+-- | The current log-wealth of the underlying bounded-mean test on
+--   the differences.
 --
 --   >>> log_wealth s0
 --   0.0
@@ -101,7 +123,7 @@ log_wealth :: State -> Double
 log_wealth (State s) = M.log_wealth s
 {-# INLINE log_wealth #-}
 
--- | The number of samples consumed so far.
+-- | The number of paired observations consumed so far.
 --
 --   >>> samples s0
 --   0
