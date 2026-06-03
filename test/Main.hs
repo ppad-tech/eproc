@@ -6,7 +6,7 @@ import Data.Bits
 import Data.Word
 import qualified Numeric.Eproc.Bettor as B
 import qualified Numeric.Eproc.Mean as M
-import qualified Numeric.Eproc.TwoSample as TS
+import qualified Numeric.Eproc.Test as T
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -86,38 +86,38 @@ rejection_rate cfg p budget trials seed =
              , v == M.Reject ]
   in  fromIntegral rejects / fromIntegral trials
 
-run_ts_paired
-  :: TS.Config
+run_paired
+  :: T.Config
   -> Double
   -> Double           -- ^ p for A and B
   -> Int
   -> Gen
-  -> (TS.Verdict, Int)
-run_ts_paired cfg pa pb budget g0 = go 0 g0 (TS.initial cfg)
+  -> (T.Verdict, Int)
+run_paired cfg pa pb budget g0 = go 0 g0 (T.initial cfg)
   where
     go !n !g !st
-      | n >= budget = (TS.decide cfg st, n)
-      | otherwise = case TS.decide cfg st of
+      | n >= budget = (T.decide cfg st, n)
+      | otherwise = case T.decide cfg st of
           M.Reject -> (M.Reject, n)
           M.Continue ->
             let (a, g1) = bernoulli pa g
                 (b, g2) = bernoulli pb g1
-                st' = TS.update cfg st (a, b)
+                st' = T.update cfg st (a, b)
             in  go (n + 1) g2 st'
 
-ts_avg_rate
-  :: TS.Config
+paired_avg_rate
+  :: T.Config
   -> Double
   -> Double
   -> Int
   -> Int
   -> Word64
   -> Double
-ts_avg_rate cfg pa pb budget trials seed =
+paired_avg_rate cfg pa pb budget trials seed =
   let gens = take trials (gen_seq (mk_gen seed))
       rejects = length
         [ () | g <- gens
-             , let (v, _) = run_ts_paired cfg pa pb budget g
+             , let (v, _) = run_paired cfg pa pb budget g
              , v == M.Reject ]
   in  fromIntegral rejects / fromIntegral trials
 
@@ -179,12 +179,12 @@ power_tests = testGroup "power" [
 two_sample_tests :: TestTree
 two_sample_tests = testGroup "two-sample" [
     testCase "identical distributions don't reject" $ do
-      let cfg = TS.config 0.0 1.0 1.0e-3 B.Ons
-          rate = ts_avg_rate cfg 0.5 0.5 2000 100 33333
+      let cfg = T.config 0.0 1.0 1.0e-3 B.Ons
+          rate = paired_avg_rate cfg 0.5 0.5 2000 100 33333
       assertBool ("FPR " ++ show rate) $ rate <= 0.05
   , testCase "different distributions reject" $ do
-      let cfg = TS.config 0.0 1.0 1.0e-3 B.Ons
-          rate = ts_avg_rate cfg 0.3 0.7 5000 100 44444
+      let cfg = T.config 0.0 1.0 1.0e-3 B.Ons
+          rate = paired_avg_rate cfg 0.3 0.7 5000 100 44444
       assertBool ("power " ++ show rate) $ rate >= 0.95
   ]
 

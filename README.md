@@ -46,7 +46,7 @@ A sample GHCi session:
 ```
 
 For the paired two-sample mean-equality test, see
-`Numeric.Eproc.TwoSample`.
+`Numeric.Eproc.Test`.
 
 ## Documentation
 

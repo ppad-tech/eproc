@@ -6,14 +6,14 @@ module Main where
 import Control.DeepSeq
 import qualified Numeric.Eproc.Bettor as B
 import qualified Numeric.Eproc.Mean as M
-import qualified Numeric.Eproc.TwoSample as TS
+import qualified Numeric.Eproc.Test as T
 import Criterion.Main
 
 -- all relevant fields are strict (and UNPACK'd for the doubles), so
 -- WHNF == NF for these types. orphan instances keep the library API
 -- untouched.
 instance NFData M.State    where rnf !_ = ()
-instance NFData TS.State   where rnf !_ = ()
+instance NFData T.State   where rnf !_ = ()
 instance NFData M.Verdict  where rnf !_ = ()
 
 main :: IO ()
@@ -63,11 +63,11 @@ stream =
 twosample :: Benchmark
 twosample =
   let !ps    = force (take 1000 (cycle [(0.3, 0.7), (0.7, 0.3)]))
-      !cfg_f = TS.config 0.0 1.0 1.0e-3 (B.Fixed 0.5)
-      !cfg_a = TS.config 0.0 1.0 1.0e-3 B.Agrapa
-      !cfg_o = TS.config 0.0 1.0 1.0e-3 B.Ons
-      run_t cfg = foldl' (TS.update cfg) (TS.initial cfg)
-  in  bgroup "TwoSample.update (1000-sample fold)" [
+      !cfg_f = T.config 0.0 1.0 1.0e-3 (B.Fixed 0.5)
+      !cfg_a = T.config 0.0 1.0 1.0e-3 B.Agrapa
+      !cfg_o = T.config 0.0 1.0 1.0e-3 B.Ons
+      run_t cfg = foldl' (T.update cfg) (T.initial cfg)
+  in  bgroup "Test.update (1000-sample fold)" [
           bench "fixed"  $ nf (run_t cfg_f) ps
         , bench "agrapa" $ nf (run_t cfg_a) ps
         , bench "ons"    $ nf (run_t cfg_o) ps
