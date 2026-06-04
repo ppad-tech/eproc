@@ -27,6 +27,7 @@
         cc    = pkgs.stdenv.cc;
         ghc   = hpkgs.ghc;
         llvm  = pkgs.llvmPackages_19.llvm;
+        clang = pkgs.llvmPackages_19.clang;
       in
         {
           packages.default = hpkgs.${lib};
@@ -40,6 +41,7 @@
               cabal
               cc
               llvm
+              clang
             ];
 
             doBenchmark = true;
