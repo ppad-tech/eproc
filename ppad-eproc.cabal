@@ -13,8 +13,9 @@ extra-doc-files:    CHANGELOG
 description:
   Anytime-valid sequential hypothesis testing for bounded random
   variables, via the e-process / betting framework of Waudby-Smith and
-  Ramdas (2024). Provides bounded-mean and paired two-sample tests
-  with fixed, adaptive (aGRAPA), and online Newton bettors.
+  Ramdas (2024). Provides bounded-mean, paired two-sample, and
+  one-sided Bernoulli rate tests with fixed, adaptive (aGRAPA), and
+  online Newton bettors.
 
 flag llvm
   description: Use GHC's LLVM backend.
@@ -33,6 +34,7 @@ library
   if flag(llvm)
     ghc-options: -fllvm -O2
   exposed-modules:
+      Numeric.Eproc.Bernoulli
       Numeric.Eproc.Bounded
       Numeric.Eproc.Paired
   build-depends:

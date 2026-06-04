@@ -4,6 +4,7 @@ module Main where
 
 import Data.Bits
 import Data.Word
+import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Paired as P
 import Test.Tasty
@@ -15,6 +16,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , calibration_tests
   , power_tests
   , two_sample_tests
+  , bernoulli_tests
   , bettor_smoke_tests
   ]
 
@@ -44,8 +46,19 @@ bernoulli !p g =
   let (u, g') = next_double g
   in  (if u < p then 1.0 else 0.0, g')
 
+-- per-trial independent seeds via a splitmix-style finalizer.
+-- previously this just stepped the prng once per trial, which made
+-- consecutive trials share all but one observation -- fine under a
+-- symmetric H_0 (rare streaks cancel), catastrophic under a skewed
+-- one (rare streaks dominate all overlapping trials).
 gen_seq :: Gen -> [Gen]
-gen_seq g = let (_, g') = step_gen g in g : gen_seq g'
+gen_seq (Gen s0) =
+  [Gen (mix64 (s0 + fromIntegral i)) | i <- [(0 :: Word64) ..]]
+  where
+    mix64 x =
+      let !y = (x `xor` (x `shiftR` 30)) * 0xbf58476d1ce4e5b9
+          !z = (y `xor` (y `shiftR` 27)) * 0x94d049bb133111eb
+      in  z `xor` (z `shiftR` 31)
 
 -- harness --------------------------------------------------------------------
 
@@ -185,6 +198,70 @@ two_sample_tests = testGroup "two-sample" [
       let cfg = P.config 0.0 1.0 1.0e-3 Bounded.Newton
           rate = paired_avg_rate cfg 0.3 0.7 5000 100 44444
       assertBool ("power " ++ show rate) $ rate >= 0.95
+  ]
+
+-- bernoulli (one-sided rate) -------------------------------------------------
+
+run_bernoulli
+  :: Bern.Config
+  -> Double           -- ^ true rate p
+  -> Int              -- ^ budget
+  -> Gen
+  -> (Bern.Verdict, Int)
+run_bernoulli cfg p budget g0 = go 0 g0 (Bern.initial cfg)
+  where
+    go !n !g !st
+      | n >= budget = (Bern.decide cfg st, n)
+      | otherwise = case Bern.decide cfg st of
+          Bern.Reject -> (Bern.Reject, n)
+          Bern.Continue ->
+            let (u, g') = next_double g
+                !x      = u < p
+                st'     = Bern.update cfg st x
+            in  go (n + 1) g' st'
+
+bernoulli_rate
+  :: Bern.Config
+  -> Double           -- ^ true rate p
+  -> Int              -- ^ budget per trial
+  -> Int              -- ^ number of trials
+  -> Word64           -- ^ seed
+  -> Double
+bernoulli_rate cfg p budget trials seed =
+  let gens = take trials (gen_seq (mk_gen seed))
+      rejects = length
+        [ () | g <- gens
+             , let (v, _) = run_bernoulli cfg p budget g
+             , v == Bern.Reject ]
+  in  fromIntegral rejects / fromIntegral trials
+
+bernoulli_tests :: TestTree
+bernoulli_tests = testGroup "bernoulli" [
+    testCase "all-zero stream never rejects" $ do
+      let cfg = Bern.config 1.0e-6 0.05 Bern.Newton
+          xs  = replicate 5000 False
+          st  = foldl' (Bern.update cfg) (Bern.initial cfg) xs
+      Bern.decide cfg st @?= Bern.Continue
+  , testCase "Newton FPR under H_0 (p = p_0 = 0.05)" $ do
+      let cfg  = Bern.config 0.05 0.05 Bern.Newton
+          rate = bernoulli_rate cfg 0.05 2000 200 55555
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.10
+  , testCase "Adaptive FPR under H_0 (p = p_0 = 0.05)" $ do
+      let cfg  = Bern.config 0.05 0.05 Bern.Adaptive
+          rate = bernoulli_rate cfg 0.05 2000 200 66666
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.10
+  , testCase "Newton detects p = 0.3 vs p_0 = 0.05" $ do
+      let cfg  = Bern.config 1.0e-3 0.05 Bern.Newton
+          rate = bernoulli_rate cfg 0.3 5000 100 77777
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
+  , testCase "Adaptive detects p = 0.3 vs p_0 = 0.05" $ do
+      let cfg  = Bern.config 1.0e-3 0.05 Bern.Adaptive
+          rate = bernoulli_rate cfg 0.3 5000 100 88888
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
   ]
 
 -- bettor smoke tests ---------------------------------------------------------
