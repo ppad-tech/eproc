@@ -26,6 +26,16 @@
 -- nonnegative supermartingale, so by Ville's inequality the
 -- probability of ever crossing the threshold is at most @alpha@,
 -- regardless of when the user decides to stop streaming samples.
+--
+-- == Example
+--
+-- Test @H_0: E[x] = 0.5@ for @x@ in @[0, 1]@ at level @alpha = 1e-3@
+-- against a stream with empirical mean @0.8@:
+--
+-- >>> let cfg = config 0.5 0.0 1.0 1.0e-3 Newton
+-- >>> let xs  = concat (replicate 30 [1, 1, 0, 1, 1, 0, 1, 1, 1, 1])
+-- >>> decide cfg (foldl' (update cfg) (initial cfg) xs)
+-- Reject
 
 module Numeric.Eproc.Bounded (
   -- * Test configuration and state

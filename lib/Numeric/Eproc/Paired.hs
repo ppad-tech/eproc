@@ -23,6 +23,17 @@
 -- alignment would need to bet against a richer alternative (the
 -- joint distribution rather than the marginal difference) and is
 -- beyond the scope of this module.
+--
+-- == Example
+--
+-- Test @H_0: E[a] = E[b]@ for samples in @[0, 1]@ at level
+-- @alpha = 1e-3@ against a stream of paired observations where @a@
+-- runs systematically higher than @b@:
+--
+-- >>> let cfg = config 0.0 1.0 1.0e-3 Newton
+-- >>> let ps  = take 1000 (cycle [(1, 0), (1, 0), (0, 0), (1, 1)])
+-- >>> decide cfg (foldl' (update cfg) (initial cfg) ps)
+-- Reject
 
 module Numeric.Eproc.Paired (
   -- * Test configuration and state
