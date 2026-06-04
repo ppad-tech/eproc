@@ -2,5 +2,5 @@
 
 - 0.1.0 (2026-06-03)
   * Initial release, supporting anytime-valid sequential testing via
-    e-processes: bounded-mean and paired two-sample tests, with
-    fixed-lambda, aGRAPA, and ONS bettors.
+    e-processes: bounded-mean, Bernoulli, and paired two-sample tests,
+    with fixed-lambda, aGRAPA, and ONS bettors.
