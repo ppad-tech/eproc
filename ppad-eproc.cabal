@@ -36,6 +36,7 @@ library
   exposed-modules:
       Numeric.Eproc.Bernoulli
       Numeric.Eproc.Bounded
+      Numeric.Eproc.Common
       Numeric.Eproc.Paired
   build-depends:
       base >= 4.9 && < 5

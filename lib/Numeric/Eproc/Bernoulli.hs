@@ -62,53 +62,13 @@ module Numeric.Eproc.Bernoulli (
   , samples
   ) where
 
+import Numeric.Eproc.Common (Bettor(..), Verdict(..))
+
 -- types ----------------------------------------------------------------------
 
--- | A predictable bettor.
---
---   A bettor describes how, given the history of centred observations
---   @z_t = x_t - p_0@, the next predictable bet @lambda_t@ is chosen.
---   Predictability -- that is, @lambda_t@ depends only on data
---   observed strictly before step @t@ -- is what makes the resulting
---   wealth process a nonnegative supermartingale under @H_0@.
---
---   For 'Adaptive' and 'Newton', a safe-bet ceiling @lambda_max@ is
---   derived from the baseline rate @p_0@ supplied to 'config' -- bets
---   get clipped to @[0, lambda_max]@ so that the wealth factor
---   @1 + lambda * (x - p_0)@ stays nonnegative for both @x = 0@ and
---   @x = 1@.
---
---   * 'Fixed' always bets the supplied constant @lambda@. The wager
---     does not respond to observed data; this strategy is useful only
---     as a baseline.
---
---   * 'Adaptive' is the Bernoulli analogue of the aGRAPA bettor of
---     Waudby-Smith & Ramdas (2024). It tracks the empirical mean
---     @mu@ and variance @sigma^2@ of centred observations and bets
---     the Kelly-optimal plug-in @lambda* = mu \/ (sigma^2 + mu^2)@
---     clipped to @[0, lambda_max]@.
---
---   * 'Newton' is the online Newton step (ONS) bettor. The per-step
---     log-wealth loss @-log(1 + lambda * z)@ is convex in @lambda@;
---     ONS performs one Newton step per observation, accumulating
---     squared gradients to scale the update.
-data Bettor =
-    Fixed {-# UNPACK #-} !Double
-  | Adaptive
-  | Newton
-  deriving (Eq, Show)
-
--- | Test outcome at the current sample count.
---
---   'Reject' means the wealth process has crossed the threshold, so
---   @H_0@ is rejected at level @alpha@. 'Continue' means there is
---   not yet enough evidence; collect more samples (or stop and
---   report no rejection -- the type-I error guarantee holds for
---   /any/ stopping rule).
-data Verdict =
-    Reject
-  | Continue
-  deriving (Eq, Show)
+-- here, the centred observation @z_t@ referenced in
+-- "Numeric.Eproc.Common" is @x_t - p_0@; the safe-bet ceiling
+-- @lambda_max@ is derived from @p_0@ (see 'config').
 
 -- bettor state. one constructor per 'Bettor' alternative; the
 -- constructor used in a given 'State' matches the 'Bettor' chosen in

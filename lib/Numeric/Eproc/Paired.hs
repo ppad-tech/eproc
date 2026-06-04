@@ -58,7 +58,7 @@ module Numeric.Eproc.Paired (
   ) where
 
 import qualified Numeric.Eproc.Bounded as Bounded
-import Numeric.Eproc.Bounded (Verdict(..), Bettor(..))
+import Numeric.Eproc.Common (Bettor(..), Verdict(..))
 
 -- types ----------------------------------------------------------------------
 

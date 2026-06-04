@@ -60,58 +60,14 @@ module Numeric.Eproc.Bounded (
   ) where
 
 import GHC.Exts (Double(D#))
+import Numeric.Eproc.Common (Bettor(..), Verdict(..))
 
 -- types ----------------------------------------------------------------------
 
--- | A predictable bettor.
---
---   A bettor describes how, given the history of centred observations
---   @z_t = x_t - m@, the next predictable bet @lambda_t@ is chosen.
---   Predictability -- that is, @lambda_t@ depends only on data
---   observed strictly before step @t@ -- is what makes the resulting
---   wealth process a nonnegative supermartingale under @H_0@.
---
---   For 'Adaptive' and 'Newton', a per-direction safe-bet ceiling
---   @lambda_max@ is derived from the sample bounds supplied to
---   'config' -- bets get clipped to @[0, lambda_max]@ so that the
---   wealth factor @1 + lambda * z@ stays nonnegative for every
---   admissible observation.
---
---   * 'Fixed' always bets the supplied constant @lambda@. The wager
---     does not respond to observed data; this strategy is useful only
---     as a baseline.
---
---   * 'Adaptive' is the aGRAPA (approximate growth-rate adaptive
---     predictable plug-in) bettor of Waudby-Smith & Ramdas (2024).
---     It tracks the empirical mean @mu@ and variance @sigma^2@ of
---     centred observations and bets the Kelly-optimal plug-in
---     @lambda* = mu \/ (sigma^2 + mu^2)@ clipped to
---     @[0, lambda_max]@. Fast to compute and competitive in practice.
---
---   * 'Newton' is the online Newton step (ONS) bettor. The per-step
---     log-wealth loss @-log(1 + lambda * z)@ is convex in @lambda@;
---     ONS performs one Newton step per observation, accumulating
---     squared gradients to scale the update. Achieves logarithmic
---     regret against the best constant bet in hindsight and is in
---     practice the strongest of the three bettors under most signal
---     regimes.
-data Bettor =
-    Fixed {-# UNPACK #-} !Double
-  | Adaptive
-  | Newton
-  deriving (Eq, Show)
-
--- | Test outcome at the current sample count.
---
---   'Reject' means the wealth process has crossed the Bonferroni
---   threshold, so @H_0@ is rejected at level @alpha@. 'Continue'
---   means there is not yet enough evidence; collect more samples (or
---   stop and report no rejection -- the type-I error guarantee holds
---   for /any/ stopping rule).
-data Verdict =
-    Reject
-  | Continue
-  deriving (Eq, Show)
+-- here, the centred observation @z_t@ referenced in
+-- "Numeric.Eproc.Common" is @x_t - m@; the per-direction safe-bet
+-- ceilings @lambda_max@ are derived from the sample bounds (see
+-- 'config').
 
 -- per-direction bettor state. one constructor per 'Bettor' alternative;
 -- the constructor used in a given 'State' matches the 'Bettor' chosen
