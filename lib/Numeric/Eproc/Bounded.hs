@@ -122,12 +122,18 @@ data BetState =
 --   and the per-direction safe-bet ceilings (see 'config' for how
 --   the latter are derived from the sample bounds).
 data Config = Config {
-    cfg_bettor      :: !Bettor                -- ^ bettor strategy
-  , cfg_lam_max_pos :: {-# UNPACK #-} !Double -- ^ pos-direction safe-bet ceiling
-  , cfg_lam_max_neg :: {-# UNPACK #-} !Double -- ^ neg-direction safe-bet ceiling
-  , cfg_null_mean   :: {-# UNPACK #-} !Double -- ^ null mean @m@
-  , cfg_alpha       :: {-# UNPACK #-} !Double -- ^ significance level @alpha@
-  , cfg_log_thresh  :: {-# UNPACK #-} !Double -- ^ rejection threshold @log(2 \/ alpha)@
+    -- ^ bettor strategy
+    cfg_bettor      :: !Bettor
+    -- ^ positive-direction safe-bet ceiling
+  , cfg_lam_max_pos :: {-# UNPACK #-} !Double
+    -- ^ negative-direction safe-bet ceiling
+  , cfg_lam_max_neg :: {-# UNPACK #-} !Double
+    -- ^ null mean @m@
+  , cfg_null_mean   :: {-# UNPACK #-} !Double
+    -- ^ significance level @alpha@
+  , cfg_alpha       :: {-# UNPACK #-} !Double
+    -- ^ rejection threshold @log(2 \/ alpha)@
+  , cfg_log_thresh  :: {-# UNPACK #-} !Double
   }
 
 -- | Streaming test state. Construct with 'initial' and fold
@@ -141,8 +147,8 @@ data Config = Config {
 --   etc.).
 data State = State {
     st_n         :: {-# UNPACK #-} !Int       -- ^ sample count
-  , st_log_w_pos :: {-# UNPACK #-} !Double    -- ^ log-wealth, pos-direction process
-  , st_log_w_neg :: {-# UNPACK #-} !Double    -- ^ log-wealth, neg-direction process
+  , st_log_w_pos :: {-# UNPACK #-} !Double    -- ^ log-wealth, pos-dir process
+  , st_log_w_neg :: {-# UNPACK #-} !Double    -- ^ log-wealth, neg-dir process
   , st_bet_pos   :: !BetState                 -- ^ bettor state, pos-direction
   , st_bet_neg   :: !BetState                 -- ^ bettor state, neg-direction
   }
