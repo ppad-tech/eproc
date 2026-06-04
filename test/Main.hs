@@ -126,12 +126,12 @@ paired_avg_rate cfg pa pb budget trials seed =
 sanity_tests :: TestTree
 sanity_tests = testGroup "sanity" [
     testCase "degenerate input never rejects" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton
           xs = replicate 5000 0.5
           st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       Bounded.decide cfg st @?= Bounded.Continue
   , testCase "two-sided thresholds applied symmetrically" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Ons
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton
       Bounded.decide cfg (Bounded.initial cfg) @?= Bounded.Continue
   ]
 
@@ -142,15 +142,15 @@ sanity_tests = testGroup "sanity" [
 -- so the slack is small.
 calibration_tests :: TestTree
 calibration_tests = testGroup "null calibration" [
-    testCase "ONS, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 0.05 Bounded.Ons
+    testCase "Newton, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 0.05 Bounded.Newton
           rate = rejection_rate cfg 0.5 2000 200 12345
       -- expected rate <= 0.05; allow up to 0.10 slack for sampling
       -- variability over 200 trials.
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
-  , testCase "aGRAPA, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 0.05 Bounded.Agrapa
+  , testCase "Adaptive, Bernoulli(0.5), m=0.5, alpha=0.05" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 0.05 Bounded.Adaptive
           rate = rejection_rate cfg 0.5 2000 200 67890
       assertBool ("FPR " ++ show rate ++ " exceeded slack") $
         rate <= 0.10
@@ -161,13 +161,13 @@ calibration_tests = testGroup "null calibration" [
 -- under a clear shift, all (or nearly all) trials reject within budget.
 power_tests :: TestTree
 power_tests = testGroup "power" [
-    testCase "ONS detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+    testCase "Newton detects Bernoulli(0.7) vs m=0.5" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
           rate = rejection_rate cfg 0.7 5000 100 11111
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
-  , testCase "aGRAPA detects Bernoulli(0.7) vs m=0.5" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Agrapa
+  , testCase "Adaptive detects Bernoulli(0.7) vs m=0.5" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive
           rate = rejection_rate cfg 0.7 5000 100 22222
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
@@ -178,11 +178,11 @@ power_tests = testGroup "power" [
 two_sample_tests :: TestTree
 two_sample_tests = testGroup "two-sample" [
     testCase "identical distributions don't reject" $ do
-      let cfg = P.config 0.0 1.0 1.0e-3 Bounded.Ons
+      let cfg = P.config 0.0 1.0 1.0e-3 Bounded.Newton
           rate = paired_avg_rate cfg 0.5 0.5 2000 100 33333
       assertBool ("FPR " ++ show rate) $ rate <= 0.05
   , testCase "different distributions reject" $ do
-      let cfg = P.config 0.0 1.0 1.0e-3 Bounded.Ons
+      let cfg = P.config 0.0 1.0 1.0e-3 Bounded.Newton
           rate = paired_avg_rate cfg 0.3 0.7 5000 100 44444
       assertBool ("power " ++ show rate) $ rate >= 0.95
   ]
@@ -198,13 +198,13 @@ bettor_smoke_tests = testGroup "bettor smoke" [
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)
-  , testCase "ONS bettor runs without error" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+  , testCase "Newton bettor runs without error" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)
-  , testCase "aGRAPA bettor runs without error" $ do
-      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Agrapa
+  , testCase "Adaptive bettor runs without error" $ do
+      let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive
           xs = take 100 (cycle [0.0, 1.0])
           st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)

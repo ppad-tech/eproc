@@ -61,7 +61,7 @@ import GHC.Exts (Double(D#))
 --   observed strictly before step @t@ -- is what makes the resulting
 --   wealth process a nonnegative supermartingale under @H_0@.
 --
---   For 'Agrapa' and 'Ons', a per-direction safe-bet ceiling
+--   For 'Adaptive' and 'Newton', a per-direction safe-bet ceiling
 --   @lambda_max@ is derived from the sample bounds supplied to
 --   'config' -- bets get clipped to @[0, lambda_max]@ so that the
 --   wealth factor @1 + lambda * z@ stays nonnegative for every
@@ -71,23 +71,24 @@ import GHC.Exts (Double(D#))
 --     does not respond to observed data; this strategy is useful only
 --     as a baseline.
 --
---   * 'Agrapa' is the aGRAPA (approximate growth-rate adaptive
+--   * 'Adaptive' is the aGRAPA (approximate growth-rate adaptive
 --     predictable plug-in) bettor of Waudby-Smith & Ramdas (2024).
 --     It tracks the empirical mean @mu@ and variance @sigma^2@ of
 --     centred observations and bets the Kelly-optimal plug-in
 --     @lambda* = mu \/ (sigma^2 + mu^2)@ clipped to
 --     @[0, lambda_max]@. Fast to compute and competitive in practice.
 --
---   * 'Ons' is the online Newton step bettor. The per-step log-wealth
---     loss @-log(1 + lambda * z)@ is convex in @lambda@; ONS performs
---     one Newton step per observation, accumulating squared gradients
---     to scale the update. Achieves logarithmic regret against the
---     best constant bet in hindsight and is in practice the strongest
---     of the three bettors under most signal regimes.
+--   * 'Newton' is the online Newton step (ONS) bettor. The per-step
+--     log-wealth loss @-log(1 + lambda * z)@ is convex in @lambda@;
+--     ONS performs one Newton step per observation, accumulating
+--     squared gradients to scale the update. Achieves logarithmic
+--     regret against the best constant bet in hindsight and is in
+--     practice the strongest of the three bettors under most signal
+--     regimes.
 data Bettor =
     Fixed {-# UNPACK #-} !Double
-  | Agrapa
-  | Ons
+  | Adaptive
+  | Newton
   deriving (Eq, Show)
 
 -- | Test outcome at the current sample count.
@@ -107,11 +108,11 @@ data Verdict =
 -- in the enclosing 'Config'.
 data BetState =
     SFixed
-  | SAgrapa
+  | SAdaptive
       {-# UNPACK #-} !Double  -- sum of z (centred observation)
       {-# UNPACK #-} !Double  -- sum of z^2 (for online variance)
       {-# UNPACK #-} !Int     -- count
-  | SOns
+  | SNewton
       {-# UNPACK #-} !Double  -- current bet lambda
       {-# UNPACK #-} !Double  -- running sum of per-step squared gradients
 
@@ -168,21 +169,21 @@ tiny = D# 1.0e-300##
 -- per-bettor initial state.
 init_bet :: Bettor -> BetState
 init_bet b = case b of
-  Fixed _ -> SFixed
-  Agrapa  -> SAgrapa 0 0 0
-  Ons     -> SOns 0 1.0e-6  -- small acc seed avoids div-by-zero on first step
+  Fixed _  -> SFixed
+  Adaptive -> SAdaptive 0 0 0
+  Newton   -> SNewton 0 1.0e-6  -- small acc seed avoids div-by-zero
 {-# INLINE init_bet #-}
 
 -- compute the next bet 'lambda' from the bettor and its current
 -- state; 'lam_max' is the direction-specific safety bound. for
--- Agrapa we form a Kelly-style plug-in from the running sample mean
--- and variance; for Ons the bet is just the last lambda chosen by the
--- Newton step (updated during 'step_bet').
+-- Adaptive we form a Kelly-style plug-in from the running sample
+-- mean and variance; for Newton the bet is just the last lambda
+-- chosen by the Newton step (updated during 'step_bet').
 bet_lambda :: Bettor -> Double -> BetState -> Double
 bet_lambda b !lam_max !s = case b of
   Fixed lam -> lam
-  Agrapa -> case s of
-    SAgrapa !sm !sm2 !n
+  Adaptive -> case s of
+    SAdaptive !sm !sm2 !n
       | n == 0    -> 0
       | otherwise ->
           let !nd  = fromIntegral n
@@ -193,30 +194,30 @@ bet_lambda b !lam_max !s = case b of
               !raw = if den == 0 then 0 else mu / den
           in  max 0 (min lam_max raw)
     _ -> 0
-  Ons -> case s of
-    SOns !lam _ -> lam
-    _           -> 0
+  Newton -> case s of
+    SNewton !lam _ -> lam
+    _              -> 0
 {-# INLINE bet_lambda #-}
 
 -- update bettor state with newly observed centred value 'z'. for
--- Agrapa this is just accumulating sums; for Ons we take one Newton
--- step on the per-step log-wealth loss '-log(1 + lambda * z)',
+-- Adaptive this is just accumulating sums; for Newton we take one
+-- Newton step on the per-step log-wealth loss '-log(1 + lambda * z)',
 -- accumulating squared gradients for adaptive scaling.
 step_bet :: Bettor -> Double -> BetState -> Double -> BetState
 step_bet b !lam_max !s !z = case b of
   Fixed _ -> SFixed
-  Agrapa -> case s of
-    SAgrapa !sm !sm2 !n -> SAgrapa (sm + z) (sm2 + z * z) (n + 1)
-    _                   -> SAgrapa z (z * z) 1
-  Ons -> case s of
-    SOns !lam !acc ->
+  Adaptive -> case s of
+    SAdaptive !sm !sm2 !n -> SAdaptive (sm + z) (sm2 + z * z) (n + 1)
+    _                     -> SAdaptive z (z * z) 1
+  Newton -> case s of
+    SNewton !lam !acc ->
       let !denom = 1 + lam * z
           !g     = if denom == 0 then 0 else negate z / denom
           !acc'  = acc + g * g
           !lam'  = lam - g / acc'
           !clp   = max 0 (min lam_max lam')
-      in  SOns clp acc'
-    _ -> SOns 0 1.0e-6
+      in  SNewton clp acc'
+    _ -> SNewton 0 1.0e-6
 {-# INLINE step_bet #-}
 
 -- construction ---------------------------------------------------------------
@@ -242,7 +243,7 @@ step_bet b !lam_max !s !z = case b of
 --   @log(2 \/ alpha)@; the 2 is the Bonferroni union-bound
 --   adjustment for the two one-sided e-processes.
 --
---   >>> let cfg = config 0.5 0.0 1.0 1.0e-3 Ons
+--   >>> let cfg = config 0.5 0.0 1.0 1.0e-3 Newton
 config
   :: Double  -- ^ null mean @m@
   -> Double  -- ^ sample lower bound @lo@

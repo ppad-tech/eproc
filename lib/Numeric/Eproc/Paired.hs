@@ -69,7 +69,7 @@ newtype State = State Bounded.State
 --   on the differences, which lie in @[lo - hi, hi - lo]@ with null
 --   mean @0@.
 --
---   >>> let cfg = config 0.0 1.0 1.0e-3 Ons
+--   >>> let cfg = config 0.0 1.0 1.0e-3 Newton
 config
   :: Double  -- ^ sample lower bound @lo@
   -> Double  -- ^ sample upper bound @hi@

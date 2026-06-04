@@ -16,8 +16,8 @@ A sample GHCi session:
   > import qualified Numeric.Eproc.Bounded as Bounded
   >
   > -- hypothesis: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3, tested
-  > -- with the ONS bettor
-  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+  > -- with the Newton bettor
+  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
   > let s0  = Bounded.initial cfg
   >
   > -- ten observations (drifting from hypothesis), and state afterwards
@@ -52,7 +52,7 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
 `cabal bench` to run the benchmark suite):
 
 ```
-  benchmarking Bounded.update (one step)/ons
+  benchmarking Bounded.update (one step)/newton
   time                 13.05 ns   (12.95 ns .. 13.17 ns)
                        1.000 R²   (0.999 R² .. 1.000 R²)
   mean                 13.03 ns   (12.95 ns .. 13.15 ns)
@@ -64,13 +64,13 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
   mean                 4.828 μs   (4.817 μs .. 4.847 μs)
   std dev              44.90 ns   (30.94 ns .. 61.54 ns)
 
-  benchmarking Bounded.update (1000-sample fold)/agrapa
+  benchmarking Bounded.update (1000-sample fold)/adaptive
   time                 15.67 μs   (15.66 μs .. 15.69 μs)
                        1.000 R²   (1.000 R² .. 1.000 R²)
   mean                 15.67 μs   (15.65 μs .. 15.69 μs)
   std dev              63.74 ns   (55.65 ns .. 75.07 ns)
 
-  benchmarking Bounded.update (1000-sample fold)/ons
+  benchmarking Bounded.update (1000-sample fold)/newton
   time                 14.43 μs   (14.42 μs .. 14.44 μs)
                        1.000 R²   (1.000 R² .. 1.000 R²)
   mean                 14.43 μs   (14.42 μs .. 14.44 μs)

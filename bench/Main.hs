@@ -26,21 +26,21 @@ main = defaultMain [
 update :: Benchmark
 update =
   let !cfg_f = Bounded.config 0.5 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5)
-      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Agrapa
-      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive
+      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
       !st_f  = Bounded.initial cfg_f
       !st_a  = Bounded.initial cfg_a
       !st_o  = Bounded.initial cfg_o
       !x     = 0.7
   in  bgroup "Bounded.update (one step)" [
           bench "fixed"  $ nf (Bounded.update cfg_f st_f) x
-        , bench "agrapa" $ nf (Bounded.update cfg_a st_a) x
-        , bench "ons"    $ nf (Bounded.update cfg_o st_o) x
+        , bench "adaptive" $ nf (Bounded.update cfg_a st_a) x
+        , bench "newton"    $ nf (Bounded.update cfg_o st_o) x
         ]
 
 decide :: Benchmark
 decide =
-  let !cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+  let !cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
       !st  = Bounded.initial cfg
   in  bgroup "Bounded.decide" [
           bench "initial state" $ nf (Bounded.decide cfg) st
@@ -50,24 +50,24 @@ stream :: Benchmark
 stream =
   let !xs    = force (take 1000 (cycle [0.3, 0.7]))
       !cfg_f = Bounded.config 0.5 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5)
-      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Agrapa
-      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Ons
+      !cfg_a = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive
+      !cfg_o = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
       run_m cfg = foldl' (Bounded.update cfg) (Bounded.initial cfg)
   in  bgroup "Bounded.update (1000-sample fold)" [
           bench "fixed"  $ nf (run_m cfg_f) xs
-        , bench "agrapa" $ nf (run_m cfg_a) xs
-        , bench "ons"    $ nf (run_m cfg_o) xs
+        , bench "adaptive" $ nf (run_m cfg_a) xs
+        , bench "newton"    $ nf (run_m cfg_o) xs
         ]
 
 twosample :: Benchmark
 twosample =
   let !ps    = force (take 1000 (cycle [(0.3, 0.7), (0.7, 0.3)]))
       !cfg_f = P.config 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5)
-      !cfg_a = P.config 0.0 1.0 1.0e-3 Bounded.Agrapa
-      !cfg_o = P.config 0.0 1.0 1.0e-3 Bounded.Ons
+      !cfg_a = P.config 0.0 1.0 1.0e-3 Bounded.Adaptive
+      !cfg_o = P.config 0.0 1.0 1.0e-3 Bounded.Newton
       run_t cfg = foldl' (P.update cfg) (P.initial cfg)
   in  bgroup "Paired.update (1000-sample fold)" [
           bench "fixed"  $ nf (run_t cfg_f) ps
-        , bench "agrapa" $ nf (run_t cfg_a) ps
-        , bench "ons"    $ nf (run_t cfg_o) ps
+        , bench "adaptive" $ nf (run_t cfg_a) ps
+        , bench "newton"    $ nf (run_t cfg_o) ps
         ]
