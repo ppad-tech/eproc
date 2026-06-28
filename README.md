@@ -16,24 +16,26 @@ A sample GHCi session:
   > import qualified Numeric.Eproc.Bounded as Bounded
   >
   > -- hypothesis: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3, tested
-  > -- with the Newton bettor
-  > let cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
-  > let s0  = Bounded.initial cfg
+  > -- with the Newton bettor. 'config' returns 'Either ConfigError Config'
+  > -- and refuses inputs outside the mathematical regime.
+  > let Right cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
+  > let s0        = Bounded.initial cfg
   >
   > -- ten observations (drifting from hypothesis), and state afterwards
   > let xs  = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]
   > let s10 = foldl' (Bounded.update cfg) s0 xs
   >
-  > -- inspect wealth and stopping decision at any point
+  > -- inspect (supremum-so-far) log-wealth and stopping decision at any
+  > -- point
   > Bounded.log_wealth s10
-  0.7182493502552663
+  0.4054651081081644
   > Bounded.decide cfg s10
   Continue
   >
   > -- with enough evidence, the hypothesis is rejected
   > let s300 = foldl' (Bounded.update cfg) s0 (concat (replicate 30 xs))
   > Bounded.log_wealth s300
-  53.092214534054165
+  51.142711428622924
   > Bounded.decide cfg s300
   Reject
 ```

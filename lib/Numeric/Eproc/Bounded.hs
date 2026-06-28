@@ -1,6 +1,5 @@
 {-# OPTIONS_HADDOCK prune #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -- |
@@ -11,28 +10,41 @@
 --
 -- Two-sided bounded-mean anytime-valid test.
 --
--- For samples @x_t@ in @[lo, hi]@, tests @H_0: E[x] = m@ against
--- @H_1: E[x] /= m@.
+-- For samples @x_t@ in @[lo, hi]@, tests
+--
+--     @H_0: E[x_t | F_{t-1}] = m   for all t@
+--
+-- against the negation. Here @F_{t-1}@ is the filtration generated
+-- by everything observed strictly before time @t@; the conditional
+-- form is what anytime validity actually requires. For i.i.d.
+-- samples this reduces to the usual marginal statement
+-- @E[x] = m@; for adaptively-collected or otherwise non-i.i.d.
+-- streams the conditional statement is the right thing to think
+-- about.
 --
 -- Internally two one-sided e-processes are run in parallel: a
 -- /positive-direction/ process betting against the alternative
--- @E[x] > m@ (using centred observations @z = x - m@), and a
--- /negative-direction/ process betting against @E[x] < m@ (using
--- @-z@). Each maintains its own log-wealth and bettor state. The
--- test rejects when either side's wealth crosses @2 \/ alpha@; the
--- factor of 2 is the Bonferroni adjustment for the two-sided union.
+-- @E[x_t | F_{t-1}] > m@ (using centred observations @z = x - m@),
+-- and a /negative-direction/ process betting against
+-- @E[x_t | F_{t-1}] < m@ (using @-z@). Each maintains its own
+-- log-wealth and bettor state. The test rejects when /either/
+-- side's wealth has /ever/ crossed @2 \/ alpha@; the factor of 2
+-- is the Bonferroni adjustment for the two-sided union.
 --
 -- The test is /anytime-valid/: under @H_0@ the wealth process is a
 -- nonnegative supermartingale, so by Ville's inequality the
--- probability of ever crossing the threshold is at most @alpha@,
+-- probability of /ever/ crossing the threshold is at most @alpha@,
 -- regardless of when the user decides to stop streaming samples.
+-- Rejection is /latched/ in the running state -- once a side has
+-- crossed threshold, 'decide' continues to return 'Reject' even if
+-- the current log-wealth has since dropped back below threshold.
 --
 -- == Example
 --
 -- Test @H_0: E[x] = 0.5@ for @x@ in @[0, 1]@ at level @alpha = 1e-3@
 -- against a stream with empirical mean @0.8@:
 --
--- >>> let cfg = config 0.5 0.0 1.0 1.0e-3 Newton
+-- >>> let Right cfg = config 0.5 0.0 1.0 1.0e-3 Newton
 -- >>> let xs  = concat (replicate 30 [1, 1, 0, 1, 1, 0, 1, 1, 1, 1])
 -- >>> decide cfg (foldl' (update cfg) (initial cfg) xs)
 -- Reject
@@ -42,6 +54,7 @@ module Numeric.Eproc.Bounded (
     Config
   , State
   , Verdict(..)
+  , ConfigError(..)
 
   -- * Bettor strategies
   , Bettor(..)
@@ -59,8 +72,10 @@ module Numeric.Eproc.Bounded (
   , samples
   ) where
 
-import GHC.Exts (Double(D#))
-import Numeric.Eproc.Common (Bettor(..), Verdict(..))
+import Numeric.Eproc.Common (
+    Bettor(..), Verdict(..), ConfigError(..)
+  , BetState, init_bet, bet_lambda, step_bet
+  )
 
 -- types ----------------------------------------------------------------------
 
@@ -68,19 +83,6 @@ import Numeric.Eproc.Common (Bettor(..), Verdict(..))
 -- "Numeric.Eproc.Common" is @x_t - m@; the per-direction safe-bet
 -- ceilings @lambda_max@ are derived from the sample bounds (see
 -- 'config').
-
--- per-direction bettor state. one constructor per 'Bettor' alternative;
--- the constructor used in a given 'State' matches the 'Bettor' chosen
--- in the enclosing 'Config'.
-data BetState =
-    SFixed
-  | SAdaptive
-      {-# UNPACK #-} !Double  -- sum of z (centred observation)
-      {-# UNPACK #-} !Double  -- sum of z^2 (for online variance)
-      {-# UNPACK #-} !Int     -- count
-  | SNewton
-      {-# UNPACK #-} !Double  -- current bet lambda
-      {-# UNPACK #-} !Double  -- running sum of per-step squared gradients
 
 -- | Bounded-mean test configuration. Build with 'config'.
 --
@@ -107,84 +109,21 @@ data Config = Config {
 --   observations through 'update'.
 --
 --   The two log-wealth fields track the running log-wealth of the
---   positive- and negative-direction e-processes separately;
---   'decide' compares each to the threshold and 'log_wealth' returns
---   the larger of the two. The per-direction bettor states carry
---   whatever the chosen 'Bettor' needs (running sums, current bet,
---   etc.).
+--   positive- and negative-direction e-processes separately; the
+--   two /maximum/ log-wealth fields latch the supremum so far on
+--   each side, so 'decide' tests the supremum-style event Ville's
+--   inequality actually bounds. The per-direction bettor states
+--   carry whatever the chosen 'Bettor' needs (running sums, current
+--   bet, etc.).
 data State = State {
-    st_n         :: {-# UNPACK #-} !Int       -- ^ sample count
-  , st_log_w_pos :: {-# UNPACK #-} !Double    -- ^ log-wealth, pos-dir process
-  , st_log_w_neg :: {-# UNPACK #-} !Double    -- ^ log-wealth, neg-dir process
-  , st_bet_pos   :: !BetState                 -- ^ bettor state, pos-direction
-  , st_bet_neg   :: !BetState                 -- ^ bettor state, neg-direction
+    st_n             :: {-# UNPACK #-} !Int     -- ^ sample count
+  , st_log_w_pos     :: {-# UNPACK #-} !Double  -- ^ log-wealth, pos
+  , st_log_w_neg     :: {-# UNPACK #-} !Double  -- ^ log-wealth, neg
+  , st_max_log_w_pos :: {-# UNPACK #-} !Double  -- ^ sup log-wealth, pos
+  , st_max_log_w_neg :: {-# UNPACK #-} !Double  -- ^ sup log-wealth, neg
+  , st_bet_pos       :: !BetState               -- ^ bettor state, pos
+  , st_bet_neg       :: !BetState               -- ^ bettor state, neg
   }
-
--- internal -------------------------------------------------------------------
-
--- floor for the wealth factor before taking a log; keeps the running
--- log-wealth finite when a step pushes the factor to (or below) zero.
--- NB. written via MagicHash because the fractional literal '1.0e-300'
---     compiles as 'fromRational (1.0e-300 :: Rational)', and GHC does
---     not constant-fold the conversion -- leaving a per-step
---     '$wrationalToDouble' call in the worker.
-tiny :: Double
-tiny = D# 1.0e-300##
-{-# INLINE tiny #-}
-
--- per-bettor initial state.
-init_bet :: Bettor -> BetState
-init_bet b = case b of
-  Fixed _  -> SFixed
-  Adaptive -> SAdaptive 0 0 0
-  Newton   -> SNewton 0 1.0e-6  -- small acc seed avoids div-by-zero
-{-# INLINE init_bet #-}
-
--- compute the next bet 'lambda' from the bettor and its current
--- state; 'lam_max' is the direction-specific safety bound. for
--- Adaptive we form a Kelly-style plug-in from the running sample
--- mean and variance; for Newton the bet is just the last lambda
--- chosen by the Newton step (updated during 'step_bet').
-bet_lambda :: Bettor -> Double -> BetState -> Double
-bet_lambda b !lam_max !s = case b of
-  Fixed lam -> lam
-  Adaptive -> case s of
-    SAdaptive !sm !sm2 !n
-      | n == 0    -> 0
-      | otherwise ->
-          let !nd  = fromIntegral n
-              !mu  = sm / nd
-              !mu2 = mu * mu
-              !var = max 0 (sm2 / nd - mu2)
-              !den = var + mu2
-              !raw = if den == 0 then 0 else mu / den
-          in  max 0 (min lam_max raw)
-    _ -> 0
-  Newton -> case s of
-    SNewton !lam _ -> lam
-    _              -> 0
-{-# INLINE bet_lambda #-}
-
--- update bettor state with newly observed centred value 'z'. for
--- Adaptive this is just accumulating sums; for Newton we take one
--- Newton step on the per-step log-wealth loss '-log(1 + lambda * z)',
--- accumulating squared gradients for adaptive scaling.
-step_bet :: Bettor -> Double -> BetState -> Double -> BetState
-step_bet b !lam_max !s !z = case b of
-  Fixed _ -> SFixed
-  Adaptive -> case s of
-    SAdaptive !sm !sm2 !n -> SAdaptive (sm + z) (sm2 + z * z) (n + 1)
-    _                     -> SAdaptive z (z * z) 1
-  Newton -> case s of
-    SNewton !lam !acc ->
-      let !denom = 1 + lam * z
-          !g     = if denom == 0 then 0 else negate z / denom
-          !acc'  = acc + g * g
-          !lam'  = lam - g / acc'
-          !clp   = max 0 (min lam_max lam')
-      in  SNewton clp acc'
-    _ -> SNewton 0 1.0e-6
-{-# INLINE step_bet #-}
 
 -- construction ---------------------------------------------------------------
 
@@ -209,27 +148,36 @@ step_bet b !lam_max !s !z = case b of
 --   @log(2 \/ alpha)@; the 2 is the Bonferroni union-bound
 --   adjustment for the two one-sided e-processes.
 --
---   >>> let cfg = config 0.5 0.0 1.0 1.0e-3 Newton
+--   Returns 'Left' with a 'ConfigError' on inputs that would leave
+--   the mathematical regime: @alpha@ outside @(0, 1)@, @lo >= hi@,
+--   or @m@ outside the open interval @(lo, hi)@ (strict, to avoid
+--   the safe-bet ceilings dividing by zero).
+--
+--   >>> let Right cfg = config 0.5 0.0 1.0 1.0e-3 Newton
 config
   :: Double  -- ^ null mean @m@
   -> Double  -- ^ sample lower bound @lo@
   -> Double  -- ^ sample upper bound @hi@
   -> Double  -- ^ significance level @alpha@
   -> Bettor  -- ^ bettor strategy
-  -> Config
-config !m !lo !hi !alpha !b = Config {
-    cfg_bettor      = b
-  , cfg_lam_max_pos = 0.5 / (m - lo)
-  , cfg_lam_max_neg = 0.5 / (hi - m)
-  , cfg_null_mean   = m
-  , cfg_alpha       = alpha
-  , cfg_log_thresh  = log (2 / alpha)
-  }
+  -> Either ConfigError Config
+config !m !lo !hi !alpha !b
+  | not (alpha > 0 && alpha < 1)  = Left (InvalidAlpha alpha)
+  | not (lo < hi)                 = Left (InvalidBounds lo hi)
+  | not (lo < m && m < hi)        = Left (InvalidNullMean m lo hi)
+  | otherwise                     = Right Config {
+        cfg_bettor      = b
+      , cfg_lam_max_pos = 0.5 / (m - lo)
+      , cfg_lam_max_neg = 0.5 / (hi - m)
+      , cfg_null_mean   = m
+      , cfg_alpha       = alpha
+      , cfg_log_thresh  = log (2 / alpha)
+      }
 {-# INLINE config #-}
 
 -- | The initial 'State' for a fresh streaming test.
 --
---   Both directional log-wealths start at @0@ (i.e., wealth @1@) and
+--   All four log-wealth fields start at @0@ (i.e., wealth @1@), and
 --   both bettors start in the per-strategy initial state appropriate
 --   for the 'Bettor' chosen in the 'Config'.
 --
@@ -238,11 +186,13 @@ initial :: Config -> State
 initial Config{..} =
   let !s0 = init_bet cfg_bettor
   in  State {
-        st_n         = 0
-      , st_log_w_pos = 0
-      , st_log_w_neg = 0
-      , st_bet_pos   = s0
-      , st_bet_neg   = s0
+        st_n             = 0
+      , st_log_w_pos     = 0
+      , st_log_w_neg     = 0
+      , st_max_log_w_pos = 0
+      , st_max_log_w_neg = 0
+      , st_bet_pos       = s0
+      , st_bet_neg       = s0
       }
 {-# INLINE initial #-}
 
@@ -256,11 +206,15 @@ initial Config{..} =
 --
 --       @log_w' = log_w + log (1 + lambda * z)@
 --
---   (with the symmetric @-lambda@ for the negative direction), and
---   then steps the bettor states given the newly observed @z@. The
---   per-step wealth factor is floored at a tiny positive value to
---   keep the log finite when a marginal bet drives the factor to (or
---   below) zero.
+--   (with the symmetric @-lambda@ for the negative direction), then
+--   updates the running supremum of log-wealth on each side and
+--   steps the bettor states given the newly observed @z@.
+--
+--   /Precondition/: @x@ must lie in the @[lo, hi]@ interval given
+--   to 'config'. The type-I error guarantee of the test depends on
+--   this. Out-of-range observations can drive the wealth factor
+--   negative, taking the construction out of the supermartingale
+--   regime entirely; the function does not check for this.
 --
 --   >>> let s1 = update cfg s0 0.7
 update :: Config -> State -> Double -> State
@@ -270,46 +224,49 @@ update Config{..} State{..} !x =
       !lam_n  = bet_lambda cfg_bettor cfg_lam_max_neg st_bet_neg
       !fac_p  = 1 + lam_p * z
       !fac_n  = 1 - lam_n * z
-      !logw_p = st_log_w_pos + log (max tiny fac_p)
-      !logw_n = st_log_w_neg + log (max tiny fac_n)
+      !logw_p = st_log_w_pos + log fac_p
+      !logw_n = st_log_w_neg + log fac_n
+      !maxp   = max st_max_log_w_pos logw_p
+      !maxn   = max st_max_log_w_neg logw_n
       !sp     = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
       !sn     = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
-  in  State (st_n + 1) logw_p logw_n sp sn
+  in  State (st_n + 1) logw_p logw_n maxp maxn sp sn
 {-# INLINE update #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
 --
---   'Reject' iff either directional log-wealth has crossed the
---   Bonferroni-adjusted threshold @log(2 \/ alpha)@; equivalently,
---   the wealth process on either side has exceeded @2 \/ alpha@.
---   Under @H_0@, by Ville's inequality, the probability of this ever
---   happening is at most @alpha@ -- and crucially this bound holds
---   at /every/ sample size simultaneously, so the user is free to
---   peek at the verdict as often as they like and stop on the first
---   'Reject'.
+--   'Reject' iff either directional log-wealth has /ever/ crossed
+--   the Bonferroni-adjusted threshold @log(2 \/ alpha)@;
+--   equivalently, the wealth process on either side has exceeded
+--   @2 \/ alpha@ at some point in the stream so far. Under @H_0@,
+--   by Ville's inequality, the probability of this ever happening
+--   is at most @alpha@ -- and crucially this bound holds at /every/
+--   sample size simultaneously, so the user is free to peek at the
+--   verdict as often as they like and stop on the first 'Reject'.
 --
 --   >>> decide cfg s0
 --   Continue
 decide :: Config -> State -> Verdict
 decide Config{..} State{..}
-  | st_log_w_pos >= cfg_log_thresh = Reject
-  | st_log_w_neg >= cfg_log_thresh = Reject
-  | otherwise                      = Continue
+  | st_max_log_w_pos >= cfg_log_thresh = Reject
+  | st_max_log_w_neg >= cfg_log_thresh = Reject
+  | otherwise                          = Continue
 {-# INLINE decide #-}
 
 -- inspection -----------------------------------------------------------------
 
--- | The current log-wealth, taken as the maximum of the two
---   directional processes.
+-- | The supremum-so-far log-wealth, taken as the maximum across the
+--   two directional processes and across all sample counts up to
+--   the current one.
 --
---   This is the natural \"test statistic\": it is monotone in the
---   evidence against @H_0@ accumulated so far, and the test rejects
---   exactly when it crosses @log(2 \/ alpha)@.
+--   This is the natural \"test statistic\": it is monotone
+--   nondecreasing in the sample count, and 'decide' rejects exactly
+--   when it crosses @log(2 \/ alpha)@.
 --
 --   >>> log_wealth s0
 --   0.0
 log_wealth :: State -> Double
-log_wealth State{..} = max st_log_w_pos st_log_w_neg
+log_wealth State{..} = max st_max_log_w_pos st_max_log_w_neg
 {-# INLINE log_wealth #-}
 
 -- | The number of samples consumed so far.
