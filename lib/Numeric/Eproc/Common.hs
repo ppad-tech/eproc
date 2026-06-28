@@ -29,6 +29,9 @@ module Numeric.Eproc.Common (
   , init_bet
   , bet_lambda
   , step_bet
+
+  -- * Internal: helpers
+  , finite
   ) where
 
 -- | A predictable bettor.
@@ -106,6 +109,13 @@ data ConfigError =
     -- | baseline rate outside @(0, 1)@
   | InvalidBaselineRate {-# UNPACK #-} !Double
   deriving (Eq, Show)
+
+-- | True iff the argument is a finite IEEE-754 double (not NaN, not
+--   @+\/-Infinity@). Used by the @config@ smart constructors to keep
+--   the bounded-random-variable promise honest.
+finite :: Double -> Bool
+finite x = not (isNaN x) && not (isInfinite x)
+{-# INLINE finite #-}
 
 -- | Per-bettor state. One constructor per 'Bettor' alternative; the
 --   constructor used in any given state matches the 'Bettor' chosen

@@ -76,6 +76,7 @@ module Numeric.Eproc.Bernoulli (
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
+  , finite
   )
 
 -- types ----------------------------------------------------------------------
@@ -128,9 +129,11 @@ data State = State {
 --   to leave numerical margin -- the WSR safety recommendation.
 --
 --   Returns 'Left' with a 'ConfigError' on inputs that would leave
---   the mathematical regime: @p_0@ outside @(0, 1)@ (the degenerate
---   case @p_0 = 0@ would make @lambda_max@ infinite, and @p_0 = 1@
---   leaves no room for an alternative), or @alpha@ outside @(0, 1)@.
+--   the mathematical regime: either of @p_0@ or @alpha@ non-finite
+--   (NaN or infinite); @p_0@ outside @(0, 1)@ (the degenerate case
+--   @p_0 = 0@ would make @lambda_max@ infinite, and @p_0 = 1@
+--   leaves no room for an alternative); or @alpha@ outside
+--   @(0, 1)@.
 --
 --   >>> let Right cfg = config 0.05 1.0e-3 Newton
 config
@@ -139,9 +142,11 @@ config
   -> Bettor  -- ^ bettor strategy
   -> Either ConfigError Config
 config !p0 !alpha !b
-  | not (p0 > 0 && p0 < 1)     = Left (InvalidBaselineRate p0)
-  | not (alpha > 0 && alpha < 1) = Left (InvalidAlpha alpha)
-  | otherwise                  = Right Config {
+  | not (finite p0 && p0 > 0 && p0 < 1) =
+      Left (InvalidBaselineRate p0)
+  | not (finite alpha && alpha > 0 && alpha < 1) =
+      Left (InvalidAlpha alpha)
+  | otherwise = Right Config {
         cfg_bettor     = b
       , cfg_lam_max    = 0.5 / p0
       , cfg_p0         = p0

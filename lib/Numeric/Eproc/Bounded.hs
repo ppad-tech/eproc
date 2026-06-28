@@ -75,6 +75,7 @@ module Numeric.Eproc.Bounded (
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
+  , finite
   )
 
 -- types ----------------------------------------------------------------------
@@ -149,9 +150,10 @@ data State = State {
 --   adjustment for the two one-sided e-processes.
 --
 --   Returns 'Left' with a 'ConfigError' on inputs that would leave
---   the mathematical regime: @alpha@ outside @(0, 1)@, @lo >= hi@,
---   or @m@ outside the open interval @(lo, hi)@ (strict, to avoid
---   the safe-bet ceilings dividing by zero).
+--   the mathematical regime: any of @m@, @lo@, @hi@, @alpha@
+--   non-finite (NaN or infinite); @alpha@ outside @(0, 1)@;
+--   @lo >= hi@; or @m@ outside the open interval @(lo, hi)@
+--   (strict, to avoid the safe-bet ceilings dividing by zero).
 --
 --   >>> let Right cfg = config 0.5 0.0 1.0 1.0e-3 Newton
 config
@@ -162,10 +164,13 @@ config
   -> Bettor  -- ^ bettor strategy
   -> Either ConfigError Config
 config !m !lo !hi !alpha !b
-  | not (alpha > 0 && alpha < 1)  = Left (InvalidAlpha alpha)
-  | not (lo < hi)                 = Left (InvalidBounds lo hi)
-  | not (lo < m && m < hi)        = Left (InvalidNullMean m lo hi)
-  | otherwise                     = Right Config {
+  | not (finite alpha && alpha > 0 && alpha < 1) =
+      Left (InvalidAlpha alpha)
+  | not (finite lo && finite hi && lo < hi) =
+      Left (InvalidBounds lo hi)
+  | not (finite m && lo < m && m < hi) =
+      Left (InvalidNullMean m lo hi)
+  | otherwise = Right Config {
         cfg_bettor      = b
       , cfg_lam_max_pos = 0.5 / (m - lo)
       , cfg_lam_max_neg = 0.5 / (hi - m)

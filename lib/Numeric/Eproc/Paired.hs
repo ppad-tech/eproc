@@ -90,8 +90,8 @@ newtype State = State Bounded.State
 --   mean @0@.
 --
 --   Returns 'Left' with a 'ConfigError' on inputs that would leave
---   the mathematical regime: @lo >= hi@ or @alpha@ outside
---   @(0, 1)@.
+--   the mathematical regime: any of @lo@, @hi@, @alpha@ non-finite
+--   (NaN or infinite); @lo >= hi@; or @alpha@ outside @(0, 1)@.
 --
 --   >>> let Right cfg = config 0.0 1.0 1.0e-3 Newton
 config

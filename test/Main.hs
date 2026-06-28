@@ -368,8 +368,24 @@ config_validation_tests = testGroup "config validation" [
       assertLeft (P.config 0.0 1.0 0.0 Bounded.Newton)
   , testCase "Paired: lo >= hi rejected" $
       assertLeft (P.config 1.0 0.0 0.01 Bounded.Newton)
+  , testCase "Bounded: infinite bounds rejected" $
+      assertLeft (Bounded.config 0.0 nInf pInf 0.01 Bounded.Newton)
+  , testCase "Bounded: NaN m rejected" $
+      assertLeft (Bounded.config nan 0.0 1.0 0.01 Bounded.Newton)
+  , testCase "Bounded: NaN alpha rejected" $
+      assertLeft (Bounded.config 0.5 0.0 1.0 nan Bounded.Newton)
+  , testCase "Bernoulli: NaN p0 rejected" $
+      assertLeft (Bern.config nan 0.01 Bern.Newton)
+  , testCase "Bernoulli: infinite alpha rejected" $
+      assertLeft (Bern.config 0.05 pInf Bern.Newton)
+  , testCase "Paired: infinite hi rejected" $
+      assertLeft (P.config 0.0 pInf 0.01 Bounded.Newton)
   ]
   where
+    nan, pInf, nInf :: Double
+    nan  = 0 / 0
+    pInf = 1 / 0
+    nInf = negate (1 / 0)
     assertLeft :: Either C.ConfigError a -> Assertion
     assertLeft e = case e of
       Left _  -> pure ()
