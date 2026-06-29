@@ -1,5 +1,17 @@
 # Changelog
 
+- 0.2.0 (2026-06-28)
+  * Introduces several breaking API changes, along with various internal
+    refinements:
+
+    * config functions now return 'Either ConfigError Config' and reject invalid
+      parameters.
+
+    * the 'Bernoulli.config' argument order changed from (a, p, b) to (p, a, b),
+      for consistency with other modules.
+
+    * log_wealth now returns the supremum, not the current value.
+
 - 0.1.0 (2026-06-03)
   * Initial release, supporting anytime-valid sequential testing via
     e-processes: bounded-mean, Bernoulli, and paired two-sample tests,
