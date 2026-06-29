@@ -23,13 +23,27 @@
 -- about.
 --
 -- Internally two one-sided e-processes are run in parallel: a
--- /positive-direction/ process betting against the alternative
--- @E[x_t | F_{t-1}] > m@ (using centred observations @z = x - m@),
--- and a /negative-direction/ process betting against
--- @E[x_t | F_{t-1}] < m@ (using @-z@). Each maintains its own
--- log-wealth and bettor state. The test rejects when /either/
--- side's wealth has /ever/ crossed @2 \/ alpha@; the factor of 2
--- is the Bonferroni adjustment for the two-sided union.
+-- /positive-direction/ process @K^+_t@ betting against the
+-- alternative @E[x_t | F_{t-1}] > m@ (using centred observations
+-- @z = x - m@), and a /negative-direction/ process @K^-_t@ betting
+-- against @E[x_t | F_{t-1}] < m@ (using @-z@). Each maintains its
+-- own log-wealth and bettor state.
+--
+-- The two sides are combined via the /hedged capital process/ of
+-- Waudby-Smith & Ramdas (2024) §4: their average
+-- @K_t = (K^+_t + K^-_t) \/ 2@ is itself an e-process (convex
+-- combinations preserve the supermartingale property), with
+-- @E[K_0] = 1@. By Ville's inequality
+-- @P(sup_t K_t >= 1 \/ alpha) <= alpha@, so the test rejects when
+-- the supremum of @K^+_t + K^-_t@ has ever crossed @2 \/ alpha@.
+--
+-- This is strictly more powerful than the naive Bonferroni union
+-- (reject when @max(K^+_t, K^-_t) >= 2 \/ alpha@): the convex-hedge
+-- rejection region contains Bonferroni's (since
+-- @K^+ + K^- >= max(K^+, K^-)@), with the same alpha guarantee.
+-- For one-sided alternatives the gap is small (the losing-direction
+-- bettor stays near @1@); for genuinely two-sided alternatives it
+-- can be substantial.
 --
 -- The test is /anytime-valid/: under @H_0@ the wealth process is a
 -- nonnegative supermartingale, so by Ville's inequality the
@@ -72,6 +86,7 @@ module Numeric.Eproc.Bounded (
   , samples
   ) where
 
+import GHC.Float (log1p)
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
@@ -88,9 +103,9 @@ import Numeric.Eproc.Common (
 -- | Bounded-mean test configuration. Build with 'config'.
 --
 --   Carries the bettor strategy, the null mean, the significance
---   level, the precomputed Bonferroni-adjusted log-wealth threshold,
---   and the per-direction safe-bet ceilings (see 'config' for how
---   the latter are derived from the sample bounds).
+--   level, the precomputed convex-hedge log-wealth threshold, and
+--   the per-direction safe-bet ceilings (see 'config' for how the
+--   latter are derived from the sample bounds).
 data Config = Config {
     -- ^ bettor strategy
     cfg_bettor      :: !Bettor
@@ -111,19 +126,18 @@ data Config = Config {
 --
 --   The two log-wealth fields track the running log-wealth of the
 --   positive- and negative-direction e-processes separately; the
---   two /maximum/ log-wealth fields latch the supremum so far on
---   each side, so 'decide' tests the supremum-style event Ville's
---   inequality actually bounds. The per-direction bettor states
---   carry whatever the chosen 'Bettor' needs (running sums, current
---   bet, etc.).
+--   /max log-sum/ field latches the supremum so far of
+--   @log(K^+_t + K^-_t)@, which is the test statistic the
+--   convex-hedge construction actually monitors. The per-direction
+--   bettor states carry whatever the chosen 'Bettor' needs (running
+--   sums, current bet, etc.).
 data State = State {
-    st_n             :: {-# UNPACK #-} !Int     -- ^ sample count
-  , st_log_w_pos     :: {-# UNPACK #-} !Double  -- ^ log-wealth, pos
-  , st_log_w_neg     :: {-# UNPACK #-} !Double  -- ^ log-wealth, neg
-  , st_max_log_w_pos :: {-# UNPACK #-} !Double  -- ^ sup log-wealth, pos
-  , st_max_log_w_neg :: {-# UNPACK #-} !Double  -- ^ sup log-wealth, neg
-  , st_bet_pos       :: !BetState               -- ^ bettor state, pos
-  , st_bet_neg       :: !BetState               -- ^ bettor state, neg
+    st_n           :: {-# UNPACK #-} !Int     -- ^ sample count
+  , st_log_w_pos   :: {-# UNPACK #-} !Double  -- ^ log-wealth, pos
+  , st_log_w_neg   :: {-# UNPACK #-} !Double  -- ^ log-wealth, neg
+  , st_max_log_sum :: {-# UNPACK #-} !Double  -- ^ sup log(K^+ + K^-)
+  , st_bet_pos     :: !BetState               -- ^ bettor state, pos
+  , st_bet_neg     :: !BetState               -- ^ bettor state, neg
   }
 
 -- construction ---------------------------------------------------------------
@@ -146,8 +160,9 @@ data State = State {
 --     half this.
 --
 --   The log-wealth rejection threshold is precomputed as
---   @log(2 \/ alpha)@; the 2 is the Bonferroni union-bound
---   adjustment for the two one-sided e-processes.
+--   @log(2 \/ alpha)@; the 2 reflects that the convex-hedge test
+--   monitors the sum @K^+_t + K^-_t@, whose initial value is @2@
+--   (each side starts at @K = 1@).
 --
 --   Returns 'Left' with a 'ConfigError' on inputs that would leave
 --   the mathematical regime: any of @m@, @lo@, @hi@, @alpha@
@@ -182,22 +197,22 @@ config !m !lo !hi !alpha !b
 
 -- | The initial 'State' for a fresh streaming test.
 --
---   All four log-wealth fields start at @0@ (i.e., wealth @1@), and
---   both bettors start in the per-strategy initial state appropriate
---   for the 'Bettor' chosen in the 'Config'.
+--   Both per-direction log-wealths start at @0@ (i.e., @K = 1@);
+--   the max-log-sum starts at @log 2@ (since @K^+_0 + K^-_0 = 2@);
+--   both bettors start in the per-strategy initial state
+--   appropriate for the 'Bettor' chosen in the 'Config'.
 --
 --   >>> let s0 = initial cfg
 initial :: Config -> State
 initial Config{..} =
   let !s0 = init_bet cfg_bettor
   in  State {
-        st_n             = 0
-      , st_log_w_pos     = 0
-      , st_log_w_neg     = 0
-      , st_max_log_w_pos = 0
-      , st_max_log_w_neg = 0
-      , st_bet_pos       = s0
-      , st_bet_neg       = s0
+        st_n           = 0
+      , st_log_w_pos   = 0
+      , st_log_w_neg   = 0
+      , st_max_log_sum = log 2
+      , st_bet_pos     = s0
+      , st_bet_neg     = s0
       }
 {-# INLINE initial #-}
 
@@ -212,8 +227,9 @@ initial Config{..} =
 --       @log_w' = log_w + log (1 + lambda * z)@
 --
 --   (with the symmetric @-lambda@ for the negative direction), then
---   updates the running supremum of log-wealth on each side and
---   steps the bettor states given the newly observed @z@.
+--   updates the running supremum of @log(K^+ + K^-)@ via
+--   log-sum-exp and steps the bettor states given the newly
+--   observed @z@.
 --
 --   /Precondition/: @x@ must lie in the @[lo, hi]@ interval given
 --   to 'config'. The type-I error guarantee of the test depends on
@@ -224,26 +240,33 @@ initial Config{..} =
 --   >>> let s1 = update cfg s0 0.7
 update :: Config -> State -> Double -> State
 update Config{..} State{..} !x =
-  let !z      = x - cfg_null_mean
-      !lam_p  = bet_lambda cfg_bettor cfg_lam_max_pos st_bet_pos
-      !lam_n  = bet_lambda cfg_bettor cfg_lam_max_neg st_bet_neg
-      !fac_p  = 1 + lam_p * z
-      !fac_n  = 1 - lam_n * z
-      !logw_p = st_log_w_pos + log fac_p
-      !logw_n = st_log_w_neg + log fac_n
-      !maxp   = max st_max_log_w_pos logw_p
-      !maxn   = max st_max_log_w_neg logw_n
-      !sp     = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
-      !sn     = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
-  in  State (st_n + 1) logw_p logw_n maxp maxn sp sn
+  let !z       = x - cfg_null_mean
+      !lam_p   = bet_lambda cfg_bettor cfg_lam_max_pos st_bet_pos
+      !lam_n   = bet_lambda cfg_bettor cfg_lam_max_neg st_bet_neg
+      !fac_p   = 1 + lam_p * z
+      !fac_n   = 1 - lam_n * z
+      !logw_p  = st_log_w_pos + log fac_p
+      !logw_n  = st_log_w_neg + log fac_n
+      !log_sum = log_sum_exp logw_p logw_n
+      !max_sum = max st_max_log_sum log_sum
+      !sp      = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
+      !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
+  in  State (st_n + 1) logw_p logw_n max_sum sp sn
 {-# INLINE update #-}
+
+-- | @log(exp a + exp b)@, computed without intermediate overflow.
+log_sum_exp :: Double -> Double -> Double
+log_sum_exp !a !b
+  | a >= b    = a + log1p (exp (b - a))
+  | otherwise = b + log1p (exp (a - b))
+{-# INLINE log_sum_exp #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
 --
---   'Reject' iff either directional log-wealth has /ever/ crossed
---   the Bonferroni-adjusted threshold @log(2 \/ alpha)@;
---   equivalently, the wealth process on either side has exceeded
---   @2 \/ alpha@ at some point in the stream so far. Under @H_0@,
+--   'Reject' iff the supremum-so-far of @log(K^+_t + K^-_t)@ has
+--   ever crossed the threshold @log(2 \/ alpha)@ — equivalently,
+--   the convex-hedge e-process @(K^+ + K^-) \/ 2@ has exceeded
+--   @1 \/ alpha@ at some point in the stream so far. Under @H_0@,
 --   by Ville's inequality, the probability of this ever happening
 --   is at most @alpha@ -- and crucially this bound holds at /every/
 --   sample size simultaneously, so the user is free to peek at the
@@ -253,25 +276,24 @@ update Config{..} State{..} !x =
 --   Continue
 decide :: Config -> State -> Verdict
 decide Config{..} State{..}
-  | st_max_log_w_pos >= cfg_log_thresh = Reject
-  | st_max_log_w_neg >= cfg_log_thresh = Reject
-  | otherwise                          = Continue
+  | st_max_log_sum >= cfg_log_thresh = Reject
+  | otherwise                        = Continue
 {-# INLINE decide #-}
 
 -- inspection -----------------------------------------------------------------
 
--- | The supremum-so-far log-wealth, taken as the maximum across the
---   two directional processes and across all sample counts up to
---   the current one.
---
---   This is the natural \"test statistic\": it is monotone
+-- | The supremum-so-far of @log(K^+_t + K^-_t)@, taken across all
+--   sample counts up to the current one. This is the test statistic
+--   the convex-hedge construction actually monitors: it is monotone
 --   nondecreasing in the sample count, and 'decide' rejects exactly
 --   when it crosses @log(2 \/ alpha)@.
 --
+--   Starts at @log 2@ (since @K^+_0 + K^-_0 = 2@).
+--
 --   >>> log_wealth s0
---   0.0
+--   0.6931471805599453
 log_wealth :: State -> Double
-log_wealth State{..} = max st_max_log_w_pos st_max_log_w_neg
+log_wealth State{..} = st_max_log_sum
 {-# INLINE log_wealth #-}
 
 -- | The number of samples consumed so far.
