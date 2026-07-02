@@ -1,20 +1,8 @@
 # Changelog
 
-- unreleased
-  * New module 'Numeric.Eproc.Bernoulli.TwoSided' providing a
-    two-sided Bernoulli rate test (H_0: p = p_0). Canonical use is
-    the sign test at p_0 = 1/2. Implemented as a newtype wrapper
-    over 'Numeric.Eproc.Bounded' (following the pattern
-    'Numeric.Eproc.Paired' uses), with the same 'config' /
-    'initial' / 'update' / 'decide' / 'log_wealth' / 'samples'
-    shape as the sibling one-sided 'Numeric.Eproc.Bernoulli'.
-
-  * Per-step performance improvements to 'Bounded.update' (and
-    hence 'Paired.update' and 'Bernoulli.TwoSided.update' via
-    wrapping): log1p replaces log-of-(1+x) for the wealth factor,
-    and log_sum_exp is skipped when a cheap upper bound guarantees
-    the running max-log-sum can't change. Under H_0 workloads the
-    fold is ~40% faster on two-sided tests.
+- 0.2.2 (2026-07-02)
+  * Adds a Numeric.Eproc.Bernoulli.TwoSided module for a two-sided
+    Bernoulli rate test.
 
 - 0.2.1 (2026-07-02)
   * Two-sided bounded-mean tests now reject faster, or at least never

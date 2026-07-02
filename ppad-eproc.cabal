@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               ppad-eproc
-version:            0.2.1
+version:            0.2.2
 synopsis:           Anytime-valid sequential testing via e-processes.
 license:            MIT
 license-file:       LICENSE
