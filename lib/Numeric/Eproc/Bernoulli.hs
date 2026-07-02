@@ -75,6 +75,7 @@ module Numeric.Eproc.Bernoulli (
   , samples
   ) where
 
+import GHC.Float (log1p)
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
@@ -200,8 +201,7 @@ update Config{..} State{..} !x =
   let !xd     = if x then 1 else 0
       !z      = xd - cfg_p0
       !lam    = bet_lambda cfg_bettor cfg_lam_max st_bet
-      !fac    = 1 + lam * z
-      !logw'  = st_log_w + log fac
+      !logw'  = st_log_w + log1p (lam * z)
       !maxw'  = max st_max_log_w logw'
       !s'     = step_bet cfg_bettor cfg_lam_max st_bet z
   in  State (st_n + 1) logw' maxw' s'

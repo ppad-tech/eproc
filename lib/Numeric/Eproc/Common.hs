@@ -33,6 +33,7 @@ module Numeric.Eproc.Common (
   -- * Internal: helpers
   , finite
   , log_sum_exp
+  , log2_dbl
   ) where
 
 import GHC.Float (log1p)
@@ -129,6 +130,15 @@ log_sum_exp !a !b
   | a >= b    = a + log1p (exp (b - a))
   | otherwise = b + log1p (exp (a - b))
 {-# INLINE log_sum_exp #-}
+
+-- | @log 2@ as a shared constant. Used both as the initial value of
+--   the two-sided running max-log-sum (since @K^+_0 + K^-_0 = 2@) and
+--   as the tight upper-bound slack in the fast-path skip inside
+--   'Numeric.Eproc.Bounded.update' /
+--   'Numeric.Eproc.Bernoulli.TwoSided.update'.
+log2_dbl :: Double
+log2_dbl = log 2
+{-# INLINE log2_dbl #-}
 
 -- | Per-bettor state. One constructor per 'Bettor' alternative; the
 --   constructor used in any given state matches the 'Bettor' chosen

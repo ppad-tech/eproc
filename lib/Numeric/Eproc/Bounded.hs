@@ -86,10 +86,11 @@ module Numeric.Eproc.Bounded (
   , samples
   ) where
 
+import GHC.Float (log1p)
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
-  , finite, log_sum_exp
+  , finite, log_sum_exp, log2_dbl
   )
 
 -- types ----------------------------------------------------------------------
@@ -209,7 +210,7 @@ initial Config{..} =
         st_n           = 0
       , st_log_w_pos   = 0
       , st_log_w_neg   = 0
-      , st_max_log_sum = log 2
+      , st_max_log_sum = log2_dbl
       , st_bet_pos     = s0
       , st_bet_neg     = s0
       }
@@ -242,12 +243,17 @@ update Config{..} State{..} !x =
   let !z       = x - cfg_null_mean
       !lam_p   = bet_lambda cfg_bettor cfg_lam_max_pos st_bet_pos
       !lam_n   = bet_lambda cfg_bettor cfg_lam_max_neg st_bet_neg
-      !fac_p   = 1 + lam_p * z
-      !fac_n   = 1 - lam_n * z
-      !logw_p  = st_log_w_pos + log fac_p
-      !logw_n  = st_log_w_neg + log fac_n
-      !log_sum = log_sum_exp logw_p logw_n
-      !max_sum = max st_max_log_sum log_sum
+      !logw_p  = st_log_w_pos + log1p (lam_p * z)
+      !logw_n  = st_log_w_neg + log1p (negate lam_n * z)
+      -- Skip 'log_sum_exp' when the cheap upper bound
+      --   log_sum_exp a b <= max a b + log 2
+      -- already sits at or below the running max: no update can
+      -- move it. Under H_0 (calibration) this is the common case.
+      !cheap_ub = max logw_p logw_n + log2_dbl
+      !max_sum
+        | cheap_ub <= st_max_log_sum = st_max_log_sum
+        | otherwise                  =
+            max st_max_log_sum (log_sum_exp logw_p logw_n)
       !sp      = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
       !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
   in  State (st_n + 1) logw_p logw_n max_sum sp sn
