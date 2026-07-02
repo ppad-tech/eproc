@@ -1,5 +1,9 @@
 # Changelog
 
+- 0.2.1 (2026-07-02)
+  * Two-sided bounded-mean tests now reject faster, or at least never
+    later.
+
 - 0.2.0 (2026-06-28)
   * Introduces several breaking API changes, along with various internal
     refinements:
