@@ -28,14 +28,14 @@ A sample GHCi session:
   > -- inspect (supremum-so-far) log-wealth and stopping decision at any
   > -- point
   > Bounded.log_wealth s10
-  0.4054651081081644
+  0.916290731874155
   > Bounded.decide cfg s10
   Continue
   >
   > -- with enough evidence, the hypothesis is rejected
   > let s300 = foldl' (Bounded.update cfg) s0 (concat (replicate 30 xs))
   > Bounded.log_wealth s300
-  51.142711428622924
+  51.14271142862292
   > Bounded.decide cfg s300
   Reject
 ```
@@ -55,29 +55,29 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
 
 ```
   benchmarking Bounded.update (one step)/newton
-  time                 13.05 ns   (12.95 ns .. 13.17 ns)
-                       1.000 R²   (0.999 R² .. 1.000 R²)
-  mean                 13.03 ns   (12.95 ns .. 13.15 ns)
-  std dev              314.0 ps   (248.3 ps .. 422.3 ps)
+  time                 13.96 ns   (13.88 ns .. 14.04 ns)
 
   benchmarking Bounded.update (1000-sample fold)/fixed
-  time                 4.840 μs   (4.819 μs .. 4.867 μs)
-                       1.000 R²   (1.000 R² .. 1.000 R²)
-  mean                 4.828 μs   (4.817 μs .. 4.847 μs)
-  std dev              44.90 ns   (30.94 ns .. 61.54 ns)
+  time                 7.951 μs   (7.944 μs .. 7.959 μs)
 
   benchmarking Bounded.update (1000-sample fold)/adaptive
-  time                 15.67 μs   (15.66 μs .. 15.69 μs)
-                       1.000 R²   (1.000 R² .. 1.000 R²)
-  mean                 15.67 μs   (15.65 μs .. 15.69 μs)
-  std dev              63.74 ns   (55.65 ns .. 75.07 ns)
+  time                 12.69 μs   (12.68 μs .. 12.71 μs)
 
   benchmarking Bounded.update (1000-sample fold)/newton
-  time                 14.43 μs   (14.42 μs .. 14.44 μs)
-                       1.000 R²   (1.000 R² .. 1.000 R²)
-  mean                 14.43 μs   (14.42 μs .. 14.44 μs)
-  std dev              46.74 ns   (34.00 ns .. 64.63 ns)
+  time                 14.61 μs   (14.57 μs .. 14.64 μs)
+
+  benchmarking Bernoulli.update (1000-sample fold)/newton
+  time                 14.64 μs   (14.63 μs .. 14.65 μs)
+
+  benchmarking Bernoulli.TwoSided.update (1000-sample fold)/newton
+  time                 14.83 μs   (14.81 μs .. 14.84 μs)
 ```
+
+The `Paired` and `Bernoulli.TwoSided` modules are thin newtype
+wrappers over `Bounded`, and inline through with no measurable
+overhead. See the criterion suite for the full breakdown across
+`Fixed` / `Adaptive` / `Newton` bettors and per-step / fold
+workloads.
 
 You should compile with the `llvm` flag for maximum performance.
 
