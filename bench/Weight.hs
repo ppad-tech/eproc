@@ -5,6 +5,7 @@ module Main where
 
 import Control.DeepSeq
 import qualified Numeric.Eproc.Bernoulli as Bern
+import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Paired as P
 import Weigh
@@ -12,6 +13,7 @@ import Weigh
 instance NFData Bounded.State    where rnf !_ = ()
 instance NFData P.State          where rnf !_ = ()
 instance NFData Bern.State       where rnf !_ = ()
+instance NFData BernTS.State     where rnf !_ = ()
 instance NFData Bounded.Verdict  where rnf !_ = ()
 
 -- partial helper for benches: configs here are hardcoded valid.
@@ -28,6 +30,8 @@ main = mainWith $ do
   twosample
   bern_update
   bern_stream
+  bern_ts_update
+  bern_ts_stream
 
 update :: Weigh ()
 update =
@@ -94,6 +98,31 @@ bern_stream =
       !cfg_o = ok (Bern.config 0.05 1.0e-3 Bern.Newton)
       run_b cfg = foldl' (Bern.update cfg) (Bern.initial cfg)
   in  wgroup "Bernoulli.update (1000-sample fold)" $ do
+        func "fixed"    (run_b cfg_f) xs
+        func "adaptive" (run_b cfg_a) xs
+        func "newton"   (run_b cfg_o) xs
+
+bern_ts_update :: Weigh ()
+bern_ts_update =
+  let !cfg_f = ok (BernTS.config 0.5 1.0e-3 (BernTS.Fixed 1.0))
+      !cfg_a = ok (BernTS.config 0.5 1.0e-3 BernTS.Adaptive)
+      !cfg_o = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
+      !st_f  = BernTS.initial cfg_f
+      !st_a  = BernTS.initial cfg_a
+      !st_o  = BernTS.initial cfg_o
+  in  wgroup "Bernoulli.TwoSided.update (one step)" $ do
+        func "fixed"    (BernTS.update cfg_f st_f) True
+        func "adaptive" (BernTS.update cfg_a st_a) True
+        func "newton"   (BernTS.update cfg_o st_o) True
+
+bern_ts_stream :: Weigh ()
+bern_ts_stream =
+  let !xs    = force (take 1000 (cycle [True, False]))
+      !cfg_f = ok (BernTS.config 0.5 1.0e-3 (BernTS.Fixed 1.0))
+      !cfg_a = ok (BernTS.config 0.5 1.0e-3 BernTS.Adaptive)
+      !cfg_o = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
+      run_b cfg = foldl' (BernTS.update cfg) (BernTS.initial cfg)
+  in  wgroup "Bernoulli.TwoSided.update (1000-sample fold)" $ do
         func "fixed"    (run_b cfg_f) xs
         func "adaptive" (run_b cfg_a) xs
         func "newton"   (run_b cfg_o) xs
