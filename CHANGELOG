@@ -1,13 +1,13 @@
 # Changelog
 
-- unreleased
-  * 'log_wealth' now returns the current log-wealth, and the
-    supremum-so-far statistic that 'decide' monitors is exposed
-    separately as 'log_wealth_sup'. Applies uniformly across
-    'Bounded', 'Paired', 'Bernoulli', and 'Bernoulli.TwoSided'.
+- 0.3.0 (2026-07-02)
+  * Introduces a breaking API change: 'log_wealth' now returns the
+    current log-wealth, whereas the supremum-thus-far statistic is
+    exposed as 'log_wealth_sup'.
 
-    Breaking: callers that relied on 'log_wealth' returning the
-    supremum should switch to 'log_wealth_sup'.
+- 0.2.2 (2026-07-02)
+  * Adds a Numeric.Eproc.Bernoulli.TwoSided module for a two-sided
+    Bernoulli rate test.
 
 - 0.2.2 (2026-07-02)
   * Adds a Numeric.Eproc.Bernoulli.TwoSided module for a two-sided
