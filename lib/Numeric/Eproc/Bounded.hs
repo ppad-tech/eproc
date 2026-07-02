@@ -86,11 +86,10 @@ module Numeric.Eproc.Bounded (
   , samples
   ) where
 
-import GHC.Float (log1p)
 import Numeric.Eproc.Common (
     Bettor(..), Verdict(..), ConfigError(..)
   , BetState, init_bet, bet_lambda, step_bet
-  , finite
+  , finite, log_sum_exp
   )
 
 -- types ----------------------------------------------------------------------
@@ -253,13 +252,6 @@ update Config{..} State{..} !x =
       !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
   in  State (st_n + 1) logw_p logw_n max_sum sp sn
 {-# INLINE update #-}
-
--- | @log(exp a + exp b)@, computed without intermediate overflow.
-log_sum_exp :: Double -> Double -> Double
-log_sum_exp !a !b
-  | a >= b    = a + log1p (exp (b - a))
-  | otherwise = b + log1p (exp (a - b))
-{-# INLINE log_sum_exp #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
 --

@@ -1,5 +1,13 @@
 # Changelog
 
+- unreleased
+  * New module 'Numeric.Eproc.Bernoulli.TwoSided' providing a
+    two-sided Bernoulli rate test (H_0: p = p_0) via the same
+    convex-hedge construction 'Bounded' uses. Canonical use is the
+    sign test at p_0 = 1/2. Same 'config' / 'initial' / 'update' /
+    'decide' / 'log_wealth' / 'samples' shape as the sibling
+    one-sided 'Numeric.Eproc.Bernoulli'.
+
 - 0.2.1 (2026-07-02)
   * Two-sided bounded-mean tests now reject faster, or at least never
     later.

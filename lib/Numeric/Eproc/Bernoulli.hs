@@ -8,7 +8,9 @@
 -- License: MIT
 -- Maintainer: Jared Tobin <jared@ppad.tech>
 --
--- One-sided Bernoulli rate anytime-valid test.
+-- One-sided Bernoulli rate anytime-valid test. See
+-- "Numeric.Eproc.Bernoulli.TwoSided" for the two-sided companion
+-- (used for the sign test at @p_0 = 1\/2@, among other things).
 --
 -- For samples @x_t@ in @{0, 1}@, tests
 --
@@ -36,9 +38,9 @@
 -- 'Reject' even if subsequent observations drive the current
 -- wealth back below threshold.
 --
--- Unlike "Numeric.Eproc.Bounded", the alternative here is one-sided,
--- so a single wealth process suffices and no Bonferroni adjustment
--- is needed -- the rejection threshold is @log(1 \/ alpha)@.
+-- The alternative here is one-sided, so a single wealth process
+-- suffices and no Bonferroni or hedge adjustment is needed -- the
+-- rejection threshold is @log(1 \/ alpha)@.
 --
 -- == Example
 --

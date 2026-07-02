@@ -5,6 +5,7 @@ module Main where
 import Data.Bits
 import Data.Word
 import qualified Numeric.Eproc.Bernoulli as Bern
+import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Common as C
 import qualified Numeric.Eproc.Paired as P
@@ -23,6 +24,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , latched_rejection_tests
   , config_validation_tests
   , safety_property_tests
+  , two_sided_bernoulli_tests
   ]
 
 -- partial helper: tests below hardcode valid configs.
@@ -390,6 +392,88 @@ config_validation_tests = testGroup "config validation" [
     assertLeft e = case e of
       Left _  -> pure ()
       Right _ -> assertFailure "expected Left"
+
+-- two-sided bernoulli --------------------------------------------------------
+
+run_ts_bernoulli
+  :: BernTS.Config
+  -> Double           -- ^ true rate p
+  -> Int              -- ^ budget
+  -> Gen
+  -> (BernTS.Verdict, Int)
+run_ts_bernoulli cfg p budget g0 =
+  go 0 g0 (BernTS.initial cfg)
+  where
+    go !n !g !st
+      | n >= budget = (BernTS.decide cfg st, n)
+      | otherwise = case BernTS.decide cfg st of
+          BernTS.Reject -> (BernTS.Reject, n)
+          BernTS.Continue ->
+            let (u, g') = next_double g
+                !x      = u < p
+                st'     = BernTS.update cfg st x
+            in  go (n + 1) g' st'
+
+ts_bernoulli_rate
+  :: BernTS.Config
+  -> Double
+  -> Int
+  -> Int
+  -> Word64
+  -> Double
+ts_bernoulli_rate cfg p budget trials seed =
+  let gens = take trials (gen_seq (mk_gen seed))
+      rejects = length
+        [ () | g <- gens
+             , let (v, _) = run_ts_bernoulli cfg p budget g
+             , v == BernTS.Reject ]
+  in  fromIntegral rejects / fromIntegral trials
+
+two_sided_bernoulli_tests :: TestTree
+two_sided_bernoulli_tests = testGroup "two-sided bernoulli" [
+    testCase "constant at p_0 doesn't reject" $ do
+      -- Bernoulli(0.5) with p_0 = 0.5 is under the null.
+      let cfg = ok (BernTS.config 0.5 1.0e-6 BernTS.Newton)
+          -- alternating True/False keeps the empirical rate at 0.5.
+          xs  = take 5000 (cycle [True, False])
+          st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) xs
+      BernTS.decide cfg st @?= BernTS.Continue
+  , testCase "detects upward shift (p = 0.7 vs p_0 = 0.5)" $ do
+      let cfg  = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
+          rate = ts_bernoulli_rate cfg 0.7 5000 100 111222
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
+  , testCase "detects downward shift (p = 0.3 vs p_0 = 0.5)" $ do
+      let cfg  = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
+          rate = ts_bernoulli_rate cfg 0.3 5000 100 333444
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
+  , testCase "FPR at p = p_0 = 0.5 within slack" $ do
+      let cfg  = ok (BernTS.config 0.5 0.05 BernTS.Newton)
+          rate = ts_bernoulli_rate cfg 0.5 2000 200 555666
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.08
+  , testCase "latched: cross then drown stays rejected" $ do
+      let cfg  = ok (BernTS.config 0.5 0.5 (BernTS.Fixed 1.0))
+          -- ten 1s push the positive side well past threshold.
+          xs1  = replicate 10 True
+          -- then two hundred 0s drop the current wealth, but the
+          -- latch must hold.
+          xs2  = replicate 200 False
+          st1  = foldl' (BernTS.update cfg) (BernTS.initial cfg) xs1
+          st2  = foldl' (BernTS.update cfg) st1 xs2
+      BernTS.decide cfg st1 @?= BernTS.Reject
+      BernTS.decide cfg st2 @?= BernTS.Reject
+  , testCase "config: NaN p0 rejected" $ do
+      let nan = 0/0 :: Double
+      case BernTS.config nan 0.05 BernTS.Newton of
+        Left _  -> pure ()
+        Right _ -> assertFailure "expected Left"
+  , testCase "config: alpha out of range rejected" $
+      case BernTS.config 0.5 1.5 BernTS.Newton of
+        Left _  -> pure ()
+        Right _ -> assertFailure "expected Left"
+  ]
 
 -- safety properties ----------------------------------------------------------
 

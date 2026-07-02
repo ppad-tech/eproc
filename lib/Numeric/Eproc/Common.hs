@@ -32,7 +32,10 @@ module Numeric.Eproc.Common (
 
   -- * Internal: helpers
   , finite
+  , log_sum_exp
   ) where
+
+import GHC.Float (log1p)
 
 -- | A predictable bettor.
 --
@@ -116,6 +119,16 @@ data ConfigError =
 finite :: Double -> Bool
 finite x = not (isNaN x) && not (isInfinite x)
 {-# INLINE finite #-}
+
+-- | @log(exp a + exp b)@, computed without intermediate overflow.
+--   Used by the convex-hedge two-sided combinations to update the
+--   running @log(K^+ + K^-)@ statistic from the two per-direction
+--   log-wealths.
+log_sum_exp :: Double -> Double -> Double
+log_sum_exp !a !b
+  | a >= b    = a + log1p (exp (b - a))
+  | otherwise = b + log1p (exp (a - b))
+{-# INLINE log_sum_exp #-}
 
 -- | Per-bettor state. One constructor per 'Bettor' alternative; the
 --   constructor used in any given state matches the 'Bettor' chosen
