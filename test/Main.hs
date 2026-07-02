@@ -448,6 +448,11 @@ two_sided_bernoulli_tests = testGroup "two-sided bernoulli" [
           rate = ts_bernoulli_rate cfg 0.3 5000 100 333444
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
+  , testCase "Adaptive detects shift (p = 0.7 vs p_0 = 0.5)" $ do
+      let cfg  = ok (BernTS.config 0.5 1.0e-3 BernTS.Adaptive)
+          rate = ts_bernoulli_rate cfg 0.7 5000 100 777888
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
   , testCase "FPR at p = p_0 = 0.5 within slack" $ do
       let cfg  = ok (BernTS.config 0.5 0.05 BernTS.Newton)
           rate = ts_bernoulli_rate cfg 0.5 2000 200 555666
@@ -499,6 +504,11 @@ monotone_reject_bern :: [Bern.Verdict] -> Bool
 monotone_reject_bern [] = True
 monotone_reject_bern (Bern.Continue : rest) = monotone_reject_bern rest
 monotone_reject_bern (Bern.Reject : rest)   = all (== Bern.Reject) rest
+
+monotone_reject_bern_ts :: [BernTS.Verdict] -> Bool
+monotone_reject_bern_ts [] = True
+monotone_reject_bern_ts (BernTS.Continue : rest) = monotone_reject_bern_ts rest
+monotone_reject_bern_ts (BernTS.Reject : rest)   = all (== BernTS.Reject) rest
 
 safety_property_tests :: TestTree
 safety_property_tests = testGroup "safety properties" [
@@ -561,4 +571,34 @@ safety_property_tests = testGroup "safety properties" [
             sts  = scanl (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
             vs   = map (Bern.decide cfg) sts
         in  monotone_reject_bern vs
+
+  , QC.testProperty "BernTS: log_wealth finite after any admissible stream" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg = ok (BernTS.config 0.5 1.0e-3 b)
+            st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+        in  finite (BernTS.log_wealth st)
+
+  , QC.testProperty "BernTS: Fixed with arbitrary lambda is safe" $
+      QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg = ok (BernTS.config 0.5 1.0e-3 (C.Fixed lam))
+            st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+        in  finite (BernTS.log_wealth st)
+
+  , QC.testProperty "BernTS: log_wealth is monotone nondecreasing" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg  = ok (BernTS.config 0.5 1.0e-3 b)
+            sts  = scanl (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+            lws  = map BernTS.log_wealth sts
+        in  and (zipWith (<=) lws (drop 1 lws))
+
+  , QC.testProperty "BernTS: rejection is latched" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg  = ok (BernTS.config 0.5 0.5 b)
+            sts  = scanl (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+            vs   = map (BernTS.decide cfg) sts
+        in  monotone_reject_bern_ts vs
   ]
