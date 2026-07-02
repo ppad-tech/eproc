@@ -54,6 +54,7 @@ module Numeric.Eproc.Bernoulli.TwoSided (
 
   -- * Inspection
   , log_wealth
+  , log_wealth_sup
   , samples
   ) where
 
@@ -121,14 +122,25 @@ decide (Config c) (State s) = Bounded.decide c s
 
 -- inspection -----------------------------------------------------------------
 
--- | The supremum-so-far of @log(K^+_t + K^-_t)@ from the underlying
---   bounded-mean test. Starts at @log 2@.
+-- | The current @log(K^+_t + K^-_t)@ of the underlying bounded-mean
+--   test. Not monotone; bounded above by 'log_wealth_sup'. Starts
+--   at @log 2@.
 --
 --   >>> log_wealth s0
 --   0.6931471805599453
 log_wealth :: State -> Double
 log_wealth (State s) = Bounded.log_wealth s
 {-# INLINE log_wealth #-}
+
+-- | The supremum-so-far of @log(K^+_t + K^-_t)@ from the underlying
+--   bounded-mean test. Monotone nondecreasing; 'decide' rejects
+--   exactly when it crosses @log(2 \/ alpha)@. Starts at @log 2@.
+--
+--   >>> log_wealth_sup s0
+--   0.6931471805599453
+log_wealth_sup :: State -> Double
+log_wealth_sup (State s) = Bounded.log_wealth_sup s
+{-# INLINE log_wealth_sup #-}
 
 -- | The number of samples consumed so far.
 --

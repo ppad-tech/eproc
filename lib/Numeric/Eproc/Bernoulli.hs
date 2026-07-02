@@ -72,6 +72,7 @@ module Numeric.Eproc.Bernoulli (
 
   -- * Inspection
   , log_wealth
+  , log_wealth_sup
   , samples
   ) where
 
@@ -117,7 +118,7 @@ data Config = Config {
 data State = State {
     st_n         :: {-# UNPACK #-} !Int     -- ^ sample count
   , st_log_w     :: {-# UNPACK #-} !Double  -- ^ running log-wealth
-  , st_max_log_w :: {-# UNPACK #-} !Double  -- ^ sup log-wealth so far
+  , st_sup_log_w :: {-# UNPACK #-} !Double  -- ^ sup log-wealth so far
   , st_bet       :: !BetState               -- ^ bettor state
   }
 
@@ -169,7 +170,7 @@ initial :: Config -> State
 initial Config{..} = State {
     st_n         = 0
   , st_log_w     = 0
-  , st_max_log_w = 0
+  , st_sup_log_w = 0
   , st_bet       = init_bet cfg_bettor
   }
 {-# INLINE initial #-}
@@ -202,9 +203,9 @@ update Config{..} State{..} !x =
       !z      = xd - cfg_p0
       !lam    = bet_lambda cfg_bettor cfg_lam_max st_bet
       !logw'  = st_log_w + log1p (lam * z)
-      !maxw'  = max st_max_log_w logw'
+      !supw'  = max st_sup_log_w logw'
       !s'     = step_bet cfg_bettor cfg_lam_max st_bet z
-  in  State (st_n + 1) logw' maxw' s'
+  in  State (st_n + 1) logw' supw' s'
 {-# INLINE update #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
@@ -221,11 +222,25 @@ update Config{..} State{..} !x =
 --   Continue
 decide :: Config -> State -> Verdict
 decide Config{..} State{..}
-  | st_max_log_w >= cfg_log_thresh = Reject
+  | st_sup_log_w >= cfg_log_thresh = Reject
   | otherwise                      = Continue
 {-# INLINE decide #-}
 
 -- inspection -----------------------------------------------------------------
+
+-- | The current running log-wealth @log W_n@ at the present sample
+--   count.
+--
+--   Unlike 'log_wealth_sup' this is not monotone: adverse
+--   observations decrease it. It is bounded above by
+--   'log_wealth_sup', which is what 'decide' tests against the
+--   rejection threshold.
+--
+--   >>> log_wealth s0
+--   0.0
+log_wealth :: State -> Double
+log_wealth = st_log_w
+{-# INLINE log_wealth #-}
 
 -- | The supremum-so-far log-wealth, across all sample counts up to
 --   the current one.
@@ -234,11 +249,11 @@ decide Config{..} State{..}
 --   nondecreasing in the sample count, and 'decide' rejects exactly
 --   when it crosses @log(1 \/ alpha)@.
 --
---   >>> log_wealth s0
+--   >>> log_wealth_sup s0
 --   0.0
-log_wealth :: State -> Double
-log_wealth = st_max_log_w
-{-# INLINE log_wealth #-}
+log_wealth_sup :: State -> Double
+log_wealth_sup = st_sup_log_w
+{-# INLINE log_wealth_sup #-}
 
 -- | The number of samples consumed so far.
 --
