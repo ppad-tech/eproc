@@ -132,7 +132,7 @@ log_sum_exp !a !b
 {-# INLINE log_sum_exp #-}
 
 -- | @log 2@ as a shared constant. Used both as the initial value of
---   the two-sided running max-log-sum (since @K^+_0 + K^-_0 = 2@) and
+--   the two-sided running sup-log-sum (since @K^+_0 + K^-_0 = 2@) and
 --   as the tight upper-bound slack in the fast-path skip inside
 --   'Numeric.Eproc.Bounded.update' /
 --   'Numeric.Eproc.Bernoulli.TwoSided.update'.

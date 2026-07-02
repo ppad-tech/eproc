@@ -25,16 +25,18 @@ A sample GHCi session:
   > let xs  = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]
   > let s10 = foldl' (Bounded.update cfg) s0 xs
   >
-  > -- inspect (supremum-so-far) log-wealth and stopping decision at any
-  > -- point
+  > -- inspect current and supremum-so-far log-wealth, and the stopping
+  > -- decision, at any point
   > Bounded.log_wealth s10
+  0.6187772969384595
+  > Bounded.log_wealth_sup s10
   0.916290731874155
   > Bounded.decide cfg s10
   Continue
   >
   > -- with enough evidence, the hypothesis is rejected
   > let s300 = foldl' (Bounded.update cfg) s0 (concat (replicate 30 xs))
-  > Bounded.log_wealth s300
+  > Bounded.log_wealth_sup s300
   51.14271142862292
   > Bounded.decide cfg s300
   Reject

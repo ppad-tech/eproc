@@ -83,6 +83,7 @@ module Numeric.Eproc.Bounded (
 
   -- * Inspection
   , log_wealth
+  , log_wealth_sup
   , samples
   ) where
 
@@ -126,7 +127,7 @@ data Config = Config {
 --
 --   The two log-wealth fields track the running log-wealth of the
 --   positive- and negative-direction e-processes separately; the
---   /max log-sum/ field latches the supremum so far of
+--   /sup log-sum/ field latches the supremum so far of
 --   @log(K^+_t + K^-_t)@, which is the test statistic the
 --   convex-hedge construction actually monitors. The per-direction
 --   bettor states carry whatever the chosen 'Bettor' needs (running
@@ -135,7 +136,7 @@ data State = State {
     st_n           :: {-# UNPACK #-} !Int     -- ^ sample count
   , st_log_w_pos   :: {-# UNPACK #-} !Double  -- ^ log-wealth, pos
   , st_log_w_neg   :: {-# UNPACK #-} !Double  -- ^ log-wealth, neg
-  , st_max_log_sum :: {-# UNPACK #-} !Double  -- ^ sup log(K^+ + K^-)
+  , st_sup_log_sum :: {-# UNPACK #-} !Double  -- ^ sup log(K^+ + K^-)
   , st_bet_pos     :: !BetState               -- ^ bettor state, pos
   , st_bet_neg     :: !BetState               -- ^ bettor state, neg
   }
@@ -198,7 +199,7 @@ config !m !lo !hi !alpha !b
 -- | The initial 'State' for a fresh streaming test.
 --
 --   Both per-direction log-wealths start at @0@ (i.e., @K = 1@);
---   the max-log-sum starts at @log 2@ (since @K^+_0 + K^-_0 = 2@);
+--   the sup-log-sum starts at @log 2@ (since @K^+_0 + K^-_0 = 2@);
 --   both bettors start in the per-strategy initial state
 --   appropriate for the 'Bettor' chosen in the 'Config'.
 --
@@ -210,7 +211,7 @@ initial Config{..} =
         st_n           = 0
       , st_log_w_pos   = 0
       , st_log_w_neg   = 0
-      , st_max_log_sum = log2_dbl
+      , st_sup_log_sum = log2_dbl
       , st_bet_pos     = s0
       , st_bet_neg     = s0
       }
@@ -250,13 +251,13 @@ update Config{..} State{..} !x =
       -- already sits at or below the running max: no update can
       -- move it. Under H_0 (calibration) this is the common case.
       !cheap_ub = max logw_p logw_n + log2_dbl
-      !max_sum
-        | cheap_ub <= st_max_log_sum = st_max_log_sum
+      !sup_sum
+        | cheap_ub <= st_sup_log_sum = st_sup_log_sum
         | otherwise                  =
-            max st_max_log_sum (log_sum_exp logw_p logw_n)
+            max st_sup_log_sum (log_sum_exp logw_p logw_n)
       !sp      = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
       !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
-  in  State (st_n + 1) logw_p logw_n max_sum sp sn
+  in  State (st_n + 1) logw_p logw_n sup_sum sp sn
 {-# INLINE update #-}
 
 -- | Compute the current 'Verdict' from the running 'State'.
@@ -274,11 +275,27 @@ update Config{..} State{..} !x =
 --   Continue
 decide :: Config -> State -> Verdict
 decide Config{..} State{..}
-  | st_max_log_sum >= cfg_log_thresh = Reject
+  | st_sup_log_sum >= cfg_log_thresh = Reject
   | otherwise                        = Continue
 {-# INLINE decide #-}
 
 -- inspection -----------------------------------------------------------------
+
+-- | The current @log(K^+_t + K^-_t)@ -- the running log-wealth of
+--   the convex-hedge combination at the present sample count.
+--
+--   Unlike 'log_wealth_sup' this is not monotone: adverse
+--   observations decrease it. It is bounded above by
+--   'log_wealth_sup', which is what 'decide' tests against the
+--   rejection threshold.
+--
+--   Starts at @log 2@ (since @K^+_0 + K^-_0 = 2@).
+--
+--   >>> log_wealth s0
+--   0.6931471805599453
+log_wealth :: State -> Double
+log_wealth State{..} = log_sum_exp st_log_w_pos st_log_w_neg
+{-# INLINE log_wealth #-}
 
 -- | The supremum-so-far of @log(K^+_t + K^-_t)@, taken across all
 --   sample counts up to the current one. This is the test statistic
@@ -288,11 +305,11 @@ decide Config{..} State{..}
 --
 --   Starts at @log 2@ (since @K^+_0 + K^-_0 = 2@).
 --
---   >>> log_wealth s0
+--   >>> log_wealth_sup s0
 --   0.6931471805599453
-log_wealth :: State -> Double
-log_wealth State{..} = st_max_log_sum
-{-# INLINE log_wealth #-}
+log_wealth_sup :: State -> Double
+log_wealth_sup State{..} = st_sup_log_sum
+{-# INLINE log_wealth_sup #-}
 
 -- | The number of samples consumed so far.
 --

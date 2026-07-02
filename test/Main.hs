@@ -517,14 +517,15 @@ safety_property_tests = testGroup "safety properties" [
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
             st  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
-        in  finite (Bounded.log_wealth st)
+        in  finite (Bounded.log_wealth st) &&
+            finite (Bounded.log_wealth_sup st)
 
   , QC.testProperty "Bernoulli: log_wealth finite after any admissible stream" $
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (Bern.config 0.05 1.0e-3 b)
             st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
-        in  finite (Bern.log_wealth st)
+        in  finite (Bern.log_wealth st) && finite (Bern.log_wealth_sup st)
 
   , QC.testProperty "Bounded: Fixed with arbitrary lambda is safe" $
       QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
@@ -540,21 +541,35 @@ safety_property_tests = testGroup "safety properties" [
             st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
         in  finite (Bern.log_wealth st)
 
-  , QC.testProperty "Bounded: log_wealth is monotone nondecreasing" $
+  , QC.testProperty "Bounded: log_wealth_sup is monotone nondecreasing" $
       QC.forAll arb_bettor $ \b ->
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg  = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
             sts  = scanl (Bounded.update cfg) (Bounded.initial cfg) xs
-            lws  = map Bounded.log_wealth sts
+            lws  = map Bounded.log_wealth_sup sts
         in  and (zipWith (<=) lws (drop 1 lws))
 
-  , QC.testProperty "Bernoulli: log_wealth is monotone nondecreasing" $
+  , QC.testProperty "Bernoulli: log_wealth_sup is monotone nondecreasing" $
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg  = ok (Bern.config 0.05 1.0e-3 b)
             sts  = scanl (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
-            lws  = map Bern.log_wealth sts
+            lws  = map Bern.log_wealth_sup sts
         in  and (zipWith (<=) lws (drop 1 lws))
+
+  , QC.testProperty "Bounded: log_wealth bounded above by log_wealth_sup" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg  = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
+            sts  = scanl (Bounded.update cfg) (Bounded.initial cfg) xs
+        in  all (\s -> Bounded.log_wealth s <= Bounded.log_wealth_sup s) sts
+
+  , QC.testProperty "Bernoulli: log_wealth bounded above by log_wealth_sup" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg  = ok (Bern.config 0.05 1.0e-3 b)
+            sts  = scanl (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
+        in  all (\s -> Bern.log_wealth s <= Bern.log_wealth_sup s) sts
 
   , QC.testProperty "Bounded: rejection is latched" $
       QC.forAll arb_bettor $ \b ->
@@ -577,7 +592,7 @@ safety_property_tests = testGroup "safety properties" [
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (BernTS.config 0.5 1.0e-3 b)
             st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
-        in  finite (BernTS.log_wealth st)
+        in  finite (BernTS.log_wealth st) && finite (BernTS.log_wealth_sup st)
 
   , QC.testProperty "BernTS: Fixed with arbitrary lambda is safe" $
       QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
@@ -586,13 +601,20 @@ safety_property_tests = testGroup "safety properties" [
             st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
         in  finite (BernTS.log_wealth st)
 
-  , QC.testProperty "BernTS: log_wealth is monotone nondecreasing" $
+  , QC.testProperty "BernTS: log_wealth_sup is monotone nondecreasing" $
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg  = ok (BernTS.config 0.5 1.0e-3 b)
             sts  = scanl (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
-            lws  = map BernTS.log_wealth sts
+            lws  = map BernTS.log_wealth_sup sts
         in  and (zipWith (<=) lws (drop 1 lws))
+
+  , QC.testProperty "BernTS: log_wealth bounded above by log_wealth_sup" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg  = ok (BernTS.config 0.5 1.0e-3 b)
+            sts  = scanl (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+        in  all (\s -> BernTS.log_wealth s <= BernTS.log_wealth_sup s) sts
 
   , QC.testProperty "BernTS: rejection is latched" $
       QC.forAll arb_bettor $ \b ->
