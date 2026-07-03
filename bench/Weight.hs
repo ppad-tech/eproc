@@ -7,6 +7,7 @@ import Control.DeepSeq
 import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
+import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
 import Weigh
 
@@ -14,6 +15,7 @@ instance NFData Bounded.State    where rnf !_ = ()
 instance NFData P.State          where rnf !_ = ()
 instance NFData Bern.State       where rnf !_ = ()
 instance NFData BernTS.State     where rnf !_ = ()
+instance NFData Mix.State        where rnf !_ = ()
 instance NFData Bounded.Verdict  where rnf !_ = ()
 
 -- partial helper for benches: configs here are hardcoded valid.
@@ -32,6 +34,8 @@ main = mainWith $ do
   bern_stream
   bern_ts_update
   bern_ts_stream
+  mix_update
+  mix_stream
 
 update :: Weigh ()
 update =
@@ -126,3 +130,20 @@ bern_ts_stream =
         func "fixed"    (run_b cfg_f) xs
         func "adaptive" (run_b cfg_a) xs
         func "newton"   (run_b cfg_o) xs
+
+mix_update :: Weigh ()
+mix_update =
+  let !cfg = ok (Mix.config 4 1.0e-3)
+      !st  = Mix.initial cfg
+      !v   = force [0.1, -0.2, 0.3, 0.0]
+  in  wgroup "Mixture.update (one step)" $ do
+        func "K=4" (Mix.update cfg st) v
+
+mix_stream :: Weigh ()
+mix_stream =
+  let !vs  = force (take 1000 (cycle
+               [[0.1, -0.2, 0.3, 0.0], [-0.3, 0.2, 0.0, 0.1]]))
+      !cfg = ok (Mix.config 4 1.0e-3)
+      run_x c = foldl' (Mix.update c) (Mix.initial c)
+  in  wgroup "Mixture.update (1000-step fold)" $ do
+        func "K=4" (run_x cfg) vs
