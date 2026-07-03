@@ -7,6 +7,7 @@ import Control.DeepSeq
 import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
+import qualified Numeric.Eproc.ConfSeq as CS
 import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
 import Criterion.Main
@@ -39,6 +40,8 @@ main = defaultMain [
   , bern_ts_stream
   , mix_update
   , mix_stream
+  , confseq_update
+  , confseq_stream
   ]
 
 update :: Benchmark
@@ -161,4 +164,27 @@ mix_stream =
       run_x c = foldl' (Mix.update c) (Mix.initial c)
   in  bgroup "Mixture.update (1000-step fold)" [
           bench "K=4" $ nf (run_x cfg) vs
+        ]
+
+-- ConfSeq.State carries a list of live grid candidates rather than
+-- only unboxed fields, but 'initial' and 'update' construct that
+-- list fully forced, so WHNF == NF holds here by construction too.
+instance NFData CS.State where rnf !_ = ()
+
+confseq_update :: Benchmark
+confseq_update =
+  let !cfg = ok (CS.config 0.0 1.0 0.05 200)
+      !st  = CS.initial cfg
+      !x   = 0.7
+  in  bgroup "ConfSeq.update (one step, g = 200)" [
+          bench "plug-in" $ nf (CS.update cfg st) x
+        ]
+
+confseq_stream :: Benchmark
+confseq_stream =
+  let !xs  = force (take 1000 (cycle [0.3, 0.7]))
+      !cfg = ok (CS.config 0.0 1.0 0.05 200)
+      run_c = foldl' (CS.update cfg) (CS.initial cfg)
+  in  bgroup "ConfSeq.update (1000-sample fold, g = 200)" [
+          bench "plug-in" $ nf run_c xs
         ]

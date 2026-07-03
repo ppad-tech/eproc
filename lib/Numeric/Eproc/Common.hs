@@ -113,8 +113,9 @@ data Verdict =
 -- | Reasons that a test-configuration smart constructor can reject
 --   its inputs. Returned by 'Numeric.Eproc.Bounded.config',
 --   'Numeric.Eproc.Bernoulli.config',
---   'Numeric.Eproc.Paired.config', and
---   'Numeric.Eproc.Mixture.config'.
+--   'Numeric.Eproc.Paired.config',
+--   'Numeric.Eproc.Mixture.config', and
+--   'Numeric.Eproc.ConfSeq.config'.
 data ConfigError =
     -- | significance level outside @(0, 1)@
     InvalidAlpha {-# UNPACK #-} !Double
@@ -130,6 +131,8 @@ data ConfigError =
   | InvalidBaselineRate {-# UNPACK #-} !Double
     -- | component count not positive
   | InvalidComponentCount {-# UNPACK #-} !Int
+    -- | grid size below @1@
+  | InvalidGridSize {-# UNPACK #-} !Int
   deriving (Eq, Show)
 
 -- | True iff the argument is a finite IEEE-754 double (not NaN, not

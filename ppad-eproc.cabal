@@ -38,6 +38,7 @@ library
       Numeric.Eproc.Bernoulli.TwoSided
       Numeric.Eproc.Bounded
       Numeric.Eproc.Common
+      Numeric.Eproc.ConfSeq
       Numeric.Eproc.Mixture
       Numeric.Eproc.Paired
   build-depends:
