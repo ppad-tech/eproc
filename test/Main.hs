@@ -8,6 +8,7 @@ import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Common as C
+import qualified Numeric.Eproc.ConfSeq as CS
 import qualified Numeric.Eproc.Paired as P
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -25,6 +26,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , config_validation_tests
   , safety_property_tests
   , two_sided_bernoulli_tests
+  , confseq_tests
   ]
 
 -- partial helper: tests below hardcode valid configs.
@@ -624,3 +626,135 @@ safety_property_tests = testGroup "safety properties" [
             vs   = map (BernTS.decide cfg) sts
         in  monotone_reject_bern_ts vs
   ]
+
+-- confidence sequences -------------------------------------------------------
+
+-- a finite stream of bernoulli(p) samples.
+cs_stream :: Double -> Int -> Gen -> [Double]
+cs_stream !p n g0 = go n g0
+  where
+    go 0 _  = []
+    go !k !g =
+      let (x, g') = bernoulli p g
+      in  x : go (k - 1) g'
+
+-- do the intervals nest: each contained in its predecessor, with
+-- Nothing (empty) absorbing?
+cs_nested :: [Maybe (Double, Double)] -> Bool
+cs_nested ivs = and (zipWith shrink ivs (drop 1 ivs))
+  where
+    shrink (Just (l1, u1)) (Just (l2, u2)) = l2 >= l1 && u2 <= u1
+    shrink (Just _)        Nothing         = True
+    shrink Nothing         Nothing         = True
+    shrink Nothing         (Just _)        = False
+
+-- fraction of trials in which the true mean ever escapes the running
+-- interval (or the interval goes empty), checked after every
+-- observation.
+cs_miscoverage_rate
+  :: CS.Config
+  -> Double   -- ^ true mean
+  -> Int      -- ^ budget per trial
+  -> Int      -- ^ number of trials
+  -> Word64   -- ^ seed
+  -> Double
+cs_miscoverage_rate cfg p budget trials seed =
+  let gens   = take trials (gen_seq (mk_gen seed))
+      misses = length [ () | g <- gens, cs_trial_missed g ]
+  in  fromIntegral misses / fromIntegral trials
+  where
+    cs_trial_missed g0 = go budget g0 (CS.initial cfg)
+      where
+        go !k !g !st
+          | k == 0    = False
+          | otherwise =
+              let (x, g') = bernoulli p g
+                  st'     = CS.update cfg st x
+              in  case CS.interval cfg st' of
+                    Nothing -> True
+                    Just (l, u)
+                      | p < l || p > u -> True
+                      | otherwise      -> go (k - 1) g' st'
+
+confseq_tests :: TestTree
+confseq_tests = testGroup "confidence sequences" [
+    testCase "initial interval is the full range" $ do
+      let cfg = ok (CS.config 0.0 1.0 0.05 100)
+      CS.interval cfg (CS.initial cfg) @?= Just (0.0, 1.0)
+  , testCase "intervals nest along a deterministic stream" $ do
+      let cfg  = ok (CS.config 0.0 1.0 0.05 50)
+          xs   = take 500 (cycle [1.0, 1.0, 0.0, 1.0])
+          sts  = scanl (CS.update cfg) (CS.initial cfg) xs
+          ivs  = map (CS.interval cfg) sts
+      assertBool "nesting violated" (cs_nested ivs)
+      -- the stream has empirical mean 0.75; the final interval must
+      -- be a strict refinement of the initial one.
+      case (ivs, reverse ivs) of
+        (iv0 : _, ivn : _) -> assertBool "no shrinkage" (iv0 /= ivn)
+        _                  -> assertFailure "no intervals"
+  , QC.testProperty "intervals nest along any admissible stream" $
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg = ok (CS.config 0.0 1.0 0.05 25)
+            sts = scanl (CS.update cfg) (CS.initial cfg) xs
+        in  cs_nested (map (CS.interval cfg) sts)
+  , testCase "coverage: off-grid Bernoulli(0.437) at alpha = 0.05" $ do
+      let cfg  = ok (CS.config 0.0 1.0 0.05 100)
+          rate = cs_miscoverage_rate cfg 0.437 1500 200 991199
+      -- expected miscoverage <= 0.05; allow up to 0.08 slack for
+      -- sampling variability over 200 trials.
+      assertBool ("miscoverage " ++ show rate ++ " exceeded slack") $
+        rate <= 0.08
+  , testCase "consistency: Bernoulli(0.3) interval shrinks onto mean" $ do
+      let cfg = ok (CS.config 0.0 1.0 1.0e-3 200)
+          xs  = cs_stream 0.3 5000 (mk_gen 424242)
+          st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+      case CS.interval cfg st of
+        Nothing -> assertFailure "interval empty"
+        Just (l, u) -> do
+          assertBool ("interval " ++ show (l, u) ++ " misses mean") $
+            l <= 0.3 && 0.3 <= u
+          assertBool ("width " ++ show (u - l) ++ " too wide") $
+            u - l < 0.2
+  , testCase "affine: mean recovered on [-5, 5]" $ do
+      -- x = 4 w.p. 0.7, x = -4 w.p. 0.3: true mean 1.6, interior
+      -- to the sample bounds and asymmetric about zero.
+      let cfg = ok (CS.config (-5.0) 5.0 0.05 100)
+          xs  = [ if b == 1.0 then 4.0 else (-4.0)
+                | b <- cs_stream 0.7 3000 (mk_gen 232323) ]
+          st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+      case CS.interval cfg st of
+        Nothing -> assertFailure "interval empty"
+        Just (l, u) -> do
+          assertBool ("interval " ++ show (l, u) ++ " misses mean") $
+            l <= 1.6 && 1.6 <= u
+          assertBool ("interval " ++ show (l, u) ++ " not refined") $
+            l > -5.0 && u < 5.0
+  , testCase "config: grid size 0 rejected" $
+      assertLeftCS (CS.config 0.0 1.0 0.05 0)
+  , testCase "config: negative grid size rejected" $
+      assertLeftCS (CS.config 0.0 1.0 0.05 (-3))
+  , testCase "config: alpha out of range rejected" $ do
+      assertLeftCS (CS.config 0.0 1.0 0.0 100)
+      assertLeftCS (CS.config 0.0 1.0 1.5 100)
+  , testCase "config: lo >= hi rejected" $
+      assertLeftCS (CS.config 1.0 0.0 0.05 100)
+  , testCase "config: non-finite inputs rejected" $ do
+      let nan  = 0 / 0 :: Double
+          pInf = 1 / 0 :: Double
+      assertLeftCS (CS.config nan 1.0 0.05 100)
+      assertLeftCS (CS.config 0.0 pInf 0.05 100)
+      assertLeftCS (CS.config 0.0 1.0 nan 100)
+  , QC.testProperty "interval endpoints well-formed on any stream" $
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg = ok (CS.config 0.0 1.0 0.05 25)
+            st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+        in  case CS.interval cfg st of
+              Nothing -> True
+              Just (l, u) ->
+                finite l && finite u && 0 <= l && l <= u && u <= 1
+  ]
+  where
+    assertLeftCS :: Either C.ConfigError a -> Assertion
+    assertLeftCS e = case e of
+      Left _  -> pure ()
+      Right _ -> assertFailure "expected Left"
