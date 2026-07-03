@@ -73,6 +73,21 @@ import GHC.Float (log1p)
 --     rate @2 \/ (2 - log 3)@. Achieves logarithmic regret against
 --     the best constant bet in hindsight and is in practice the
 --     strongest of the three bettors under most signal regimes.
+--
+--     One deliberate deviation from WSR: Algorithm 2 seeds the
+--     squared-gradient accumulator at @1@, which presumes
+--     observations scaled to @[0, 1]@. On raw-scale data that
+--     constant is dimensionally wrong -- negligible when
+--     @z^2 >> 1@, paralysing when @z^2 << 1@ -- so the accumulator
+--     here is instead seeded near zero, making the update
+--     scale-adaptive. The trade is bold early play: the first
+--     nonzero observation typically drives the bet straight to
+--     the @lambda_max@ ceiling, annealing back toward the Kelly
+--     point as gradients accumulate. Validity is unaffected --
+--     predictability and clipping are all it needs -- and regret
+--     stays logarithmic with a somewhat larger constant. The
+--     visible effect is higher-variance early wealth: a supremum
+--     modestly above its floor is expected even under @H_0@.
 data Bettor =
     Fixed {-# UNPACK #-} !Double
   | Adaptive
