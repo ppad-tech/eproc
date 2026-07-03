@@ -8,6 +8,7 @@ import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Common as C
+import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -26,6 +27,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , safety_property_tests
   , two_sided_bernoulli_tests
   , evalue_accessor_tests
+  , mixture_tests
   ]
 
 -- partial helper: tests below hardcode valid configs.
@@ -727,4 +729,138 @@ evalue_accessor_tests = testGroup "e-value accessors" [
                        in  p >= 0 && p <= 1 &&
                            Bern.log_evalue s
                              <= Bern.log_evalue_sup s) sts
+  ]
+
+-- mixture --------------------------------------------------------------------
+
+approx_eq :: Double -> Double -> Bool
+approx_eq a b = abs (a - b) <= 1.0e-9 * max 1 (max (abs a) (abs b))
+
+-- step a censor-style two-component hedge (sign + magnitude) over a
+-- shared bernoulli stream, feeding the mixture the components'
+-- current log e-values, with the early-stopping rule built in.
+run_mixture
+  :: Mix.Config
+  -> BernTS.Config
+  -> Bounded.Config
+  -> Double            -- ^ true bernoulli p
+  -> Int               -- ^ budget
+  -> Gen
+  -> (Mix.Verdict, Int)
+run_mixture xc sc mc p budget g0 =
+  go 0 g0 (BernTS.initial sc) (Bounded.initial mc) (Mix.initial xc)
+  where
+    go !n !g !s !m !x
+      | n >= budget = (Mix.decide xc x, n)
+      | otherwise = case Mix.decide xc x of
+          Mix.Reject -> (Mix.Reject, n)
+          Mix.Continue ->
+            let (v, g') = bernoulli p g
+                s'      = BernTS.update sc s (v == 1.0)
+                m'      = Bounded.update mc m v
+                x'      = Mix.update xc x
+                            [BernTS.log_evalue s', Bounded.log_evalue m']
+            in  go (n + 1) g' s' m' x'
+
+mixture_rate :: Double -> Double -> Int -> Int -> Word64 -> Double
+mixture_rate alpha p budget trials seed =
+  let xc   = ok (Mix.config 2 alpha)
+      sc   = ok (BernTS.config 0.5 alpha BernTS.Newton)
+      mc   = ok (Bounded.config 0.5 0.0 1.0 alpha Bounded.Newton)
+      gens = take trials (gen_seq (mk_gen seed))
+      rejects = length
+        [ () | g <- gens
+             , let (v, _) = run_mixture xc sc mc p budget g
+             , v == Mix.Reject ]
+  in  fromIntegral rejects / fromIntegral trials
+
+mixture_tests :: TestTree
+mixture_tests = testGroup "mixture" [
+    testCase "fresh mixture sits at log K, p-value 1" $ do
+      let cfg = ok (Mix.config 4 1.0e-3)
+          s0  = Mix.initial cfg
+      assertBool "log_wealth is log K" $
+        approx_eq (Mix.log_wealth s0) (log 4)
+      Mix.log_evalue cfg s0 @?= 0.0
+      Mix.log_evalue_sup cfg s0 @?= 0.0
+      Mix.p_value cfg s0 @?= 1.0
+      Mix.decide cfg s0 @?= Mix.Continue
+
+  , testCase "latch is on the mixture sup, not per-component sups" $ do
+      -- two components peak at different times, each attaining log
+      -- e-value 1.0. A bogus combination of per-component suprema,
+      -- log_sum_exp 1 1 ~ 1.69, crosses the K = 2, alpha = 0.5
+      -- threshold log 4 ~ 1.39; the mixture itself never exceeds
+      -- ~1.003 and must not reject.
+      let cfg = ok (Mix.config 2 0.5)
+          s1  = Mix.update cfg (Mix.initial cfg) [1.0, -5.0]
+          s2  = Mix.update cfg s1 [-5.0, 1.0]
+      Mix.decide cfg s2 @?= Mix.Continue
+      assertBool "mixture sup below threshold" $
+        Mix.log_wealth_sup s2 < log 4
+      assertBool "per-component-sup combination would cross" $
+        C.log_sum_exp 1.0 1.0 >= log 4
+
+  , testCase "empty update vector is a no-op" $ do
+      let cfg = ok (Mix.config 2 1.0e-3)
+          s0  = Mix.initial cfg
+          s1  = Mix.update cfg s0 []
+      Mix.samples s1 @?= 0
+      Mix.log_wealth s1 @?= Mix.log_wealth s0
+
+  , testCase "config validation" $ do
+      let assert_left :: Either C.ConfigError Mix.Config -> Assertion
+          assert_left e = case e of
+            Left _  -> pure ()
+            Right _ -> assertFailure "expected Left"
+      assert_left (Mix.config 0 0.05)
+      assert_left (Mix.config (-3) 0.05)
+      assert_left (Mix.config 4 0.0)
+      assert_left (Mix.config 4 1.5)
+      assert_left (Mix.config 4 (0 / 0))
+
+  , QC.testProperty "K identical components track the component" $
+      QC.forAll (QC.choose (1, 6)) $ \k ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let bcfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton)
+            xcfg = ok (Mix.config k 1.0e-3)
+            sts  = drop 1 (scanl (Bounded.update bcfg)
+                            (Bounded.initial bcfg) xs)
+            les  = map Bounded.log_evalue sts
+            mix  = foldl'
+                     (\acc l -> Mix.update xcfg acc (replicate k l))
+                     (Mix.initial xcfg) les
+            cfin = foldl' (Bounded.update bcfg) (Bounded.initial bcfg) xs
+        in  approx_eq (Mix.log_evalue xcfg mix)
+                      (Bounded.log_evalue cfin)
+            && approx_eq (Mix.log_evalue_sup xcfg mix)
+                         (Bounded.log_evalue_sup cfin)
+
+  , QC.testProperty "decide agrees with p_value at alpha" $
+      QC.forAll (QC.choose (1, 6)) $ \k ->
+      QC.forAll (QC.listOf (QC.vectorOf k (QC.choose (-5, 5)))) $ \vs ->
+        let alpha = 0.5
+            cfg   = ok (Mix.config k alpha)
+            sts   = scanl (Mix.update cfg) (Mix.initial cfg) vs
+        in  all (\s -> (Mix.decide cfg s == Mix.Reject)
+                    == (Mix.p_value cfg s <= alpha)) sts
+
+  , QC.testProperty "sup monotone nondecreasing, verdict latched" $
+      QC.forAll (QC.choose (1, 6)) $ \k ->
+      QC.forAll (QC.listOf (QC.vectorOf k (QC.choose (-5, 5)))) $ \vs ->
+        let cfg  = ok (Mix.config k 0.5)
+            sts  = scanl (Mix.update cfg) (Mix.initial cfg) vs
+            sups = map Mix.log_wealth_sup sts
+        in  and (zipWith (<=) sups (drop 1 sups))
+            && monotone_reject_bounded (map (Mix.decide cfg) sts)
+
+  , testCase "FPR under H_0 within slack (sign + magnitude hedge)" $ do
+      let rate = mixture_rate 0.05 0.5 2000 200 424242
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.08
+
+  , testCase "power against p = 0.7 (sign + magnitude hedge)" $ do
+      let rate = mixture_rate 1.0e-3 0.7 5000 100 434343
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
   ]
