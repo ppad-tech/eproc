@@ -25,6 +25,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , config_validation_tests
   , safety_property_tests
   , two_sided_bernoulli_tests
+  , evalue_accessor_tests
   ]
 
 -- partial helper: tests below hardcode valid configs.
@@ -623,4 +624,107 @@ safety_property_tests = testGroup "safety properties" [
             sts  = scanl (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
             vs   = map (BernTS.decide cfg) sts
         in  monotone_reject_bern_ts vs
+  ]
+
+-- e-value accessors ----------------------------------------------------------
+
+unit_pair :: QC.Gen (Double, Double)
+unit_pair = (,) <$> unit_double <*> unit_double
+
+evalue_accessor_tests :: TestTree
+evalue_accessor_tests = testGroup "e-value accessors" [
+    testCase "fresh states normalize to e-value 1, p-value 1" $ do
+      let bcfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton)
+          ncfg = ok (Bern.config 0.05 1.0e-3 Bern.Newton)
+          tcfg = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
+          pcfg = ok (P.config 0.0 1.0 1.0e-3 Bounded.Newton)
+      Bounded.log_evalue (Bounded.initial bcfg) @?= 0.0
+      Bounded.log_evalue_sup (Bounded.initial bcfg) @?= 0.0
+      Bounded.p_value (Bounded.initial bcfg) @?= 1.0
+      Bern.log_evalue (Bern.initial ncfg) @?= 0.0
+      Bern.p_value (Bern.initial ncfg) @?= 1.0
+      BernTS.log_evalue (BernTS.initial tcfg) @?= 0.0
+      BernTS.p_value (BernTS.initial tcfg) @?= 1.0
+      P.log_evalue (P.initial pcfg) @?= 0.0
+      P.p_value (P.initial pcfg) @?= 1.0
+
+  , QC.testProperty "Bounded: log_evalue is log_wealth less log 2" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
+            st  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+        in  Bounded.log_evalue st == Bounded.log_wealth st - C.log2_dbl
+
+  , QC.testProperty "Bernoulli: log_evalue coincides with log_wealth" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg = ok (Bern.config 0.05 1.0e-3 b)
+            st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
+        in  Bern.log_evalue st == Bern.log_wealth st
+
+  , QC.testProperty "Bounded: decide agrees with p_value at alpha" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let alpha = 0.5
+            cfg   = ok (Bounded.config 0.5 0.0 1.0 alpha b)
+            sts   = scanl (Bounded.update cfg) (Bounded.initial cfg) xs
+        in  all (\s -> (Bounded.decide cfg s == Bounded.Reject)
+                    == (Bounded.p_value s <= alpha)) sts
+
+  , QC.testProperty "Bernoulli: decide agrees with p_value at alpha" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let alpha = 0.5
+            cfg   = ok (Bern.config 0.5 alpha b)
+            sts   = scanl (Bern.update cfg) (Bern.initial cfg)
+                      (xs :: [Bool])
+        in  all (\s -> (Bern.decide cfg s == Bern.Reject)
+                    == (Bern.p_value s <= alpha)) sts
+
+  , QC.testProperty "BernTS: decide agrees with p_value at alpha" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let alpha = 0.5
+            cfg   = ok (BernTS.config 0.5 alpha b)
+            sts   = scanl (BernTS.update cfg) (BernTS.initial cfg)
+                      (xs :: [Bool])
+        in  all (\s -> (BernTS.decide cfg s == BernTS.Reject)
+                    == (BernTS.p_value s <= alpha)) sts
+
+  , QC.testProperty "Bounded: p_value monotone nonincreasing" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
+            sts = scanl (Bounded.update cfg) (Bounded.initial cfg) xs
+            ps  = map Bounded.p_value sts
+        in  and (zipWith (>=) ps (drop 1 ps))
+
+  , QC.testProperty "Paired: p_value monotone nonincreasing" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_pair) $ \ps ->
+        let cfg = ok (P.config 0.0 1.0 1.0e-3 b)
+            sts = scanl (P.update cfg) (P.initial cfg) ps
+            pv  = map P.p_value sts
+        in  and (zipWith (>=) pv (drop 1 pv))
+
+  , QC.testProperty "Bounded: p_value in [0, 1], evalue below sup" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
+            sts = scanl (Bounded.update cfg) (Bounded.initial cfg) xs
+        in  all (\s -> let p = Bounded.p_value s
+                       in  p >= 0 && p <= 1 &&
+                           Bounded.log_evalue s
+                             <= Bounded.log_evalue_sup s) sts
+
+  , QC.testProperty "Bernoulli: p_value in [0, 1], evalue below sup" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll QC.arbitrary $ \xs ->
+        let cfg = ok (Bern.config 0.05 1.0e-3 b)
+            sts = scanl (Bern.update cfg) (Bern.initial cfg)
+                    (xs :: [Bool])
+        in  all (\s -> let p = Bern.p_value s
+                       in  p >= 0 && p <= 1 &&
+                           Bern.log_evalue s
+                             <= Bern.log_evalue_sup s) sts
   ]
