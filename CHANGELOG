@@ -1,13 +1,20 @@
 # Changelog
 
+- 0.4.0 (2026-07-03)
+  * Adds calibrated evidence accessors to every test module:
+    'log_evalue', 'log_evalue_sup', and the anytime-valid 'p_value'.
+  * Adds Numeric.Eproc.Mixture: uniform convex mixtures of
+    e-processes, for testing a null against a union of qualitatively
+    different alternatives at a single Ville threshold.
+  * Adds Numeric.Eproc.ConfSeq: anytime-valid confidence sequences
+    for bounded means, via the hedged-capital construction of
+    Waudby-Smith & Ramdas (2024).
+  * Adds InvalidComponentCount and InvalidGridSize to ConfigError.
+
 - 0.3.0 (2026-07-02)
   * Introduces a breaking API change: 'log_wealth' now returns the
     current log-wealth, whereas the supremum-thus-far statistic is
     exposed as 'log_wealth_sup'.
-
-- 0.2.2 (2026-07-02)
-  * Adds a Numeric.Eproc.Bernoulli.TwoSided module for a two-sided
-    Bernoulli rate test.
 
 - 0.2.2 (2026-07-02)
   * Adds a Numeric.Eproc.Bernoulli.TwoSided module for a two-sided

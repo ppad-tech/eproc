@@ -62,17 +62,24 @@
 --
 -- >>> import qualified Numeric.Eproc.Bernoulli.TwoSided as Sign
 -- >>> import qualified Numeric.Eproc.Bounded as Magn
--- >>> let Right sc = Sign.config 0.5 1.0e-3 Newton
--- >>> let Right mc = Magn.config 0.0 (-1.0) 1.0 1.0e-3 Newton
--- >>> let Right xc = config 2 1.0e-3
+-- >>> import qualified Numeric.Eproc.Mixture as Mix
+-- >>> let Right sc = Sign.config 0.5 1.0e-3 Sign.Newton
+-- >>> let Right mc = Magn.config 0.0 (-1.0) 1.0 1.0e-3 Magn.Newton
+-- >>> let Right xc = Mix.config 2 1.0e-3
 -- >>> :{
--- let step (!s, !m, !x) d =
+-- let step (s, m, x) d =
 --       let s' = Sign.update sc s (d > 0)
 --           m' = Magn.update mc m d
---       in  (s', m', update xc x [Sign.log_evalue s', Magn.log_evalue m'])
+--       in  (s', m', Mix.update xc x
+--                      [Sign.log_evalue s', Magn.log_evalue m'])
 -- :}
--- >>> let (_, _, x1) = foldl' step (Sign.initial sc, Magn.initial mc, initial xc) ds
--- >>> decide xc x1
+-- >>> let ds = take 400 (cycle [0.6, 0.7, -0.2, 0.8])
+-- >>> let z0 = (Sign.initial sc, Magn.initial mc, Mix.initial xc)
+-- >>> let (_, _, xf) = foldl' step z0 ds
+-- >>> Mix.decide xc xf
+-- Reject
+-- >>> Mix.p_value xc xf
+-- 9.482234479673792e-34
 
 module Numeric.Eproc.Mixture (
   -- * Mixture configuration and state

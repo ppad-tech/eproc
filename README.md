@@ -4,9 +4,9 @@
 ![](https://img.shields.io/badge/license-MIT-brightgreen)
 [![](https://img.shields.io/badge/haddock-eproc-lightblue)](https://docs.ppad.tech/eproc)
 
-Anytime-valid sequential hypothesis testing for bounded random
-variables, via the e-process / betting framework of
-[Waudby-Smith & Ramdas (2024)][wsr24].
+Anytime-valid sequential hypothesis testing and confidence sequences
+for bounded random variables, via the e-process / betting framework
+of [Waudby-Smith & Ramdas (2024)][wsr24].
 
 ## Usage
 
@@ -42,6 +42,30 @@ A sample GHCi session:
   Reject
 ```
 
+Confidence sequences invert the same machinery into time-uniform
+interval estimates: valid at every sample size simultaneously, so you
+can watch the interval shrink and stop whenever it's tight enough:
+
+```
+  > import qualified Numeric.Eproc.ConfSeq as CS
+  >
+  > -- estimate a mean in [0, 1] at 95% coverage, on a 100-point grid
+  > let Right cfg = CS.config 0.0 1.0 0.05 100
+  > let s0        = CS.initial cfg
+  >
+  > -- the same drifting stream as above; the interval closes in on
+  > -- its empirical mean of 0.8
+  > let xs = concat (replicate 30 [1, 1, 0, 1, 1, 0, 1, 1, 1, 1])
+  > CS.interval cfg (foldl' (CS.update cfg) s0 xs)
+  Just (0.7227722772277227,0.8712871287128713)
+```
+
+Every test module also reports its evidence as an anytime-valid
+p-value (`p_value`) and a normalized log e-value (`log_evalue`); the
+`Mixture` module combines several e-processes into a single test with
+power against a union of alternatives (see its haddocks for a worked
+sign-plus-magnitude example).
+
 ## Documentation
 
 Haddocks (API documentation, etc.) are hosted at
@@ -73,13 +97,24 @@ Current benchmark figures on an M4 Silicon MacBook Air look like (use
 
   benchmarking Bernoulli.TwoSided.update (1000-sample fold)/newton
   time                 14.83 μs   (14.81 μs .. 14.84 μs)
+
+  benchmarking Mixture.update (one step)/K=4
+  time                 31.38 ns   (31.21 ns .. 31.55 ns)
+
+  benchmarking ConfSeq.update (one step, g = 200)/plug-in
+  time                 2.121 μs   (2.118 μs .. 2.124 μs)
+
+  benchmarking ConfSeq.update (1000-sample fold, g = 200)/plug-in
+  time                 241.2 μs   (239.7 μs .. 243.2 μs)
 ```
 
 The `Paired` and `Bernoulli.TwoSided` modules are thin newtype
 wrappers over `Bounded`, and inline through with no measurable
-overhead. See the criterion suite for the full breakdown across
-`Fixed` / `Adaptive` / `Newton` bettors and per-step / fold
-workloads.
+overhead. `ConfSeq` updates cost O(live grid candidates) per
+observation, so long streams get cheaper as candidates are rejected
+(visible in the sub-linear fold figure above). See the criterion
+suite for the full breakdown across `Fixed` / `Adaptive` / `Newton`
+bettors and per-step / fold workloads.
 
 You should compile with the `llvm` flag for maximum performance.
 
@@ -103,7 +138,7 @@ to get a REPL for the main library.
 ## References
 
 - Waudby-Smith & Ramdas (2024), "[Estimating means of bounded random
-  variables by betting][wsr24]." JRSS-Bounded.
+  variables by betting][wsr24]." JRSS-B.
 - Ramdas, Grunwald, Vovk, Shafer (2023), "[Game-theoretic statistics
   and safe anytime-valid inference][rgvs23]." Statistical Science.
 - Shafer (2021), "[Testing by betting][shafer21]." JRSS-A.
