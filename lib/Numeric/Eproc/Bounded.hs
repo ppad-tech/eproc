@@ -84,6 +84,9 @@ module Numeric.Eproc.Bounded (
   -- * Inspection
   , log_wealth
   , log_wealth_sup
+  , log_evalue
+  , log_evalue_sup
+  , p_value
   , samples
   ) where
 
@@ -310,6 +313,47 @@ log_wealth State{..} = log_sum_exp st_log_w_pos st_log_w_neg
 log_wealth_sup :: State -> Double
 log_wealth_sup State{..} = st_sup_log_sum
 {-# INLINE log_wealth_sup #-}
+
+-- | The current log e-value of the convex-hedge e-process: the log
+--   of @(K^+_t + K^-_t) \/ 2@, i.e. 'log_wealth' minus @log 2@.
+--
+--   Unlike 'log_wealth', this is normalized so that a fresh state
+--   sits at @0@ (e-value @1@): it is directly comparable across
+--   test modules regardless of their internal hedging, and is the
+--   form to use when convex-combining several e-processes. Not
+--   monotone; bounded above by 'log_evalue_sup'.
+--
+--   >>> log_evalue s0
+--   0.0
+log_evalue :: State -> Double
+log_evalue s = log_wealth s - log2_dbl
+{-# INLINE log_evalue #-}
+
+-- | The supremum-so-far of the log e-value: 'log_wealth_sup' minus
+--   @log 2@. Monotone nondecreasing, starting at @0@; 'decide'
+--   rejects exactly when it crosses @log(1 \/ alpha)@.
+--
+--   >>> log_evalue_sup s0
+--   0.0
+log_evalue_sup :: State -> Double
+log_evalue_sup s = log_wealth_sup s - log2_dbl
+{-# INLINE log_evalue_sup #-}
+
+-- | The anytime-valid p-value: the reciprocal of the largest
+--   e-value attained so far, @min 1 (exp (negate (log_evalue_sup
+--   s)))@.
+--
+--   Monotone nonincreasing in the sample count, and valid under
+--   optional stopping: under @H_0@,
+--   @P(exists t: p_t <= alpha) <= alpha@ for every @alpha@
+--   simultaneously. 'decide' returns 'Reject' exactly when this
+--   value has reached the configured @alpha@ or below.
+--
+--   >>> p_value s0
+--   1.0
+p_value :: State -> Double
+p_value s = min 1 (exp (negate (log_evalue_sup s)))
+{-# INLINE p_value #-}
 
 -- | The number of samples consumed so far.
 --
