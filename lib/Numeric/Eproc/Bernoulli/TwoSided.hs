@@ -55,6 +55,9 @@ module Numeric.Eproc.Bernoulli.TwoSided (
   -- * Inspection
   , log_wealth
   , log_wealth_sup
+  , log_evalue
+  , log_evalue_sup
+  , p_value
   , samples
   ) where
 
@@ -141,6 +144,38 @@ log_wealth (State s) = Bounded.log_wealth s
 log_wealth_sup :: State -> Double
 log_wealth_sup (State s) = Bounded.log_wealth_sup s
 {-# INLINE log_wealth_sup #-}
+
+-- | The current log e-value of the underlying bounded-mean test:
+--   'log_wealth' minus @log 2@, normalized so a fresh state sits at
+--   @0@. Not monotone; bounded above by 'log_evalue_sup'.
+--
+--   >>> log_evalue s0
+--   0.0
+log_evalue :: State -> Double
+log_evalue (State s) = Bounded.log_evalue s
+{-# INLINE log_evalue #-}
+
+-- | The supremum-so-far of the log e-value: 'log_wealth_sup' minus
+--   @log 2@. Monotone nondecreasing, starting at @0@; 'decide'
+--   rejects exactly when it crosses @log(1 \/ alpha)@.
+--
+--   >>> log_evalue_sup s0
+--   0.0
+log_evalue_sup :: State -> Double
+log_evalue_sup (State s) = Bounded.log_evalue_sup s
+{-# INLINE log_evalue_sup #-}
+
+-- | The anytime-valid p-value: the reciprocal of the largest
+--   e-value attained so far. Monotone nonincreasing; under @H_0@,
+--   @P(exists t: p_t <= alpha) <= alpha@ for every @alpha@
+--   simultaneously. 'decide' returns 'Reject' exactly when this
+--   value has reached the configured @alpha@ or below.
+--
+--   >>> p_value s0
+--   1.0
+p_value :: State -> Double
+p_value (State s) = Bounded.p_value s
+{-# INLINE p_value #-}
 
 -- | The number of samples consumed so far.
 --

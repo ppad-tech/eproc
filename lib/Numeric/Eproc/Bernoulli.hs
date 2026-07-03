@@ -73,6 +73,9 @@ module Numeric.Eproc.Bernoulli (
   -- * Inspection
   , log_wealth
   , log_wealth_sup
+  , log_evalue
+  , log_evalue_sup
+  , p_value
   , samples
   ) where
 
@@ -254,6 +257,47 @@ log_wealth = st_log_w
 log_wealth_sup :: State -> Double
 log_wealth_sup = st_sup_log_w
 {-# INLINE log_wealth_sup #-}
+
+-- | The current log e-value. For this one-sided test the single
+--   wealth process is itself the e-process (a fresh state already
+--   sits at wealth @1@), so this coincides with 'log_wealth'; the
+--   accessor exists so that e-values read uniformly across test
+--   modules regardless of their internal hedging, e.g. when
+--   convex-combining several e-processes. Not monotone; bounded
+--   above by 'log_evalue_sup'.
+--
+--   >>> log_evalue s0
+--   0.0
+log_evalue :: State -> Double
+log_evalue = st_log_w
+{-# INLINE log_evalue #-}
+
+-- | The supremum-so-far of the log e-value; coincides with
+--   'log_wealth_sup' for this one-sided test. Monotone
+--   nondecreasing, starting at @0@; 'decide' rejects exactly when
+--   it crosses @log(1 \/ alpha)@.
+--
+--   >>> log_evalue_sup s0
+--   0.0
+log_evalue_sup :: State -> Double
+log_evalue_sup = st_sup_log_w
+{-# INLINE log_evalue_sup #-}
+
+-- | The anytime-valid p-value: the reciprocal of the largest
+--   e-value attained so far, @min 1 (exp (negate (log_evalue_sup
+--   s)))@.
+--
+--   Monotone nonincreasing in the sample count, and valid under
+--   optional stopping: under @H_0@,
+--   @P(exists t: p_t <= alpha) <= alpha@ for every @alpha@
+--   simultaneously. 'decide' returns 'Reject' exactly when this
+--   value has reached the configured @alpha@ or below.
+--
+--   >>> p_value s0
+--   1.0
+p_value :: State -> Double
+p_value s = min 1 (exp (negate (log_evalue_sup s)))
+{-# INLINE p_value #-}
 
 -- | The number of samples consumed so far.
 --
