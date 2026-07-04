@@ -69,7 +69,7 @@
 -- >>> let Right cfg = config 0.0 1.0 0.05 100
 -- >>> let xs = concat (replicate 50 [1, 1, 0, 1, 1, 0, 1, 1, 1, 1])
 -- >>> interval cfg (foldl' (update cfg) (initial cfg) xs)
--- Just (0.7326732673267327,0.8514851485148515)
+-- Just (0.7326732673267327,0.8613861386138614)
 
 module Numeric.Eproc.ConfSeq (
   -- * Confidence-sequence configuration and state
@@ -218,14 +218,15 @@ initial Config{..} = State {
 --   plug-in bet from the statistics accumulated through the
 --   /previous/ step (Waudby-Smith & Ramdas (2024), eq. (26)):
 --
---       @lambda_t = min c (sqrt (2 log(2 \/ alpha)
---                     \/ (sigma^2_{t-1} * t * log(1 + t))))@
+--       @lambda_t = sqrt (2 log(2 \/ alpha)
+--                     \/ (sigma^2_{t-1} * t * log(1 + t)))@
 --
---   with @c = 1\/2@. The bet is computed once and shared across all
+--   The bet is computed once and shared across all
 --   live candidates -- its independence from @m@ is what keeps the
 --   survivor set an interval. Each live candidate @m@ then updates
 --   its pair of log-capitals with the truncated bets
---   @min lambda_t (c \/ m)@ and @min lambda_t (c \/ (1 - m))@, and
+--   @min lambda_t (c \/ m)@ and @min lambda_t (c \/ (1 - m))@,
+--   with @c = 1\/2@, and
 --   is dropped iff @max(log K^+, log K^-)@ has reached
 --   @log(2 \/ alpha)@. Finally @y@ is folded into the shared
 --   statistics, preserving predictability of the next bet.
@@ -245,8 +246,7 @@ update Config{..} State{..} !x =
       !gp1  = fromIntegral (cfg_grid + 1)
       -- sigma^2_{t-1} = (1/4 + sum_{i<=t-1} (y_i - mu_i)^2) / t
       !sig2 = (0.25 + st_sum_dev2) / td
-      !lam  = min trunc_c
-                  (sqrt (cfg_bet_num / (sig2 * td * log1p td)))
+      !lam  = sqrt (cfg_bet_num / (sig2 * td * log1p td))
       -- built eagerly, as in 'initial': the tail is forced before
       -- consing, so the new live list is in normal form on
       -- construction.
