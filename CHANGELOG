@@ -1,5 +1,8 @@
 # Changelog
 
+- 0.4.1 (2026-07-04)
+  * Fixes a bug that made confidence sequences needlessly conservative.
+
 - 0.4.0 (2026-07-03)
   * Adds calibrated evidence accessors to every test module:
     'log_evalue', 'log_evalue_sup', and the anytime-valid 'p_value'.
