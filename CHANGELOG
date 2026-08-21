@@ -1,5 +1,15 @@
 # Changelog
 
+- 0.5.0 (2026-08-21)
+  * Adds Numeric.Eproc.Bounded.configInterval: interval nulls
+    H_0: m_lo <= E[x | F] <= m_hi for the two-sided bounded-mean
+    test, with the positive-direction process centred at m_hi and
+    the negative-direction process at m_lo. The point-null 'config'
+    is the degenerate case m_lo = m_hi and behaves exactly as
+    before.
+  * Adds InvalidNullInterval to ConfigError (a breaking change for
+    exhaustive matches on that type).
+
 - 0.4.1 (2026-07-04)
   * Fixes a bug that made confidence sequences needlessly conservative.
 
