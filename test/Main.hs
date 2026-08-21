@@ -20,6 +20,7 @@ main = defaultMain $ testGroup "ppad-eproc" [
     sanity_tests
   , calibration_tests
   , power_tests
+  , interval_tests
   , two_sample_tests
   , bernoulli_tests
   , bettor_smoke_tests
@@ -201,6 +202,80 @@ power_tests = testGroup "power" [
           rate = rejection_rate cfg 0.7 5000 100 22222
       assertBool ("power " ++ show rate ++ " too low") $
         rate >= 0.95
+  ]
+
+-- interval null --------------------------------------------------------------
+
+interval_tests :: TestTree
+interval_tests = testGroup "interval null" [
+    QC.testProperty "configInterval m m matches config m exactly" $
+      QC.forAll arb_bettor $ \b ->
+      QC.forAll (QC.listOf unit_double) $ \xs ->
+        let cfgP = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
+            cfgI = ok (Bounded.configInterval 0.5 0.5 0.0 1.0 1.0e-3 b)
+            stP  = foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
+            stI  = foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
+        in  Bounded.log_wealth stP == Bounded.log_wealth stI &&
+            Bounded.log_wealth_sup stP == Bounded.log_wealth_sup stI
+  , testCase "interior systematic tolerated where point null rejects" $ do
+      -- a constant stream at 0.52: inside [0.45, 0.55], outside the
+      -- point null at 0.5. The interval test accumulates nothing;
+      -- the point test rejects.
+      let cfgI = ok (Bounded.configInterval 0.45 0.55 0.0 1.0
+                       1.0e-6 Bounded.Newton)
+          cfgP = ok (Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton)
+          xs   = replicate 5000 0.52
+          stI  = foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
+          stP  = foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
+      Bounded.decide cfgI stI @?= Bounded.Continue
+      Bounded.decide cfgP stP @?= Bounded.Reject
+  , testCase "calibration at the null boundary (p = m_hi)" $ do
+      -- the guarantee is tightest at the endpoints; the empirical
+      -- rate there should still be bounded by alpha (same slack
+      -- convention as the point-null calibration tests).
+      let cfg = ok (Bounded.configInterval 0.45 0.55 0.0 1.0
+                      0.05 Bounded.Newton)
+          rate = rejection_rate cfg 0.55 2000 200 34567
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.08
+  , testCase "calibration in the interior (p = 0.5)" $ do
+      let cfg = ok (Bounded.configInterval 0.45 0.55 0.0 1.0
+                      0.05 Bounded.Newton)
+          rate = rejection_rate cfg 0.5 2000 200 45678
+      assertBool ("FPR " ++ show rate ++ " exceeded slack") $
+        rate <= 0.08
+  , testCase "detects Bernoulli(0.7) above [0.45, 0.55]" $ do
+      let cfg = ok (Bounded.configInterval 0.45 0.55 0.0 1.0
+                      1.0e-3 Bounded.Newton)
+          rate = rejection_rate cfg 0.7 5000 100 56789
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
+  , testCase "detects Bernoulli(0.3) below [0.45, 0.55]" $ do
+      let cfg = ok (Bounded.configInterval 0.45 0.55 0.0 1.0
+                      1.0e-3 Bounded.Newton)
+          rate = rejection_rate cfg 0.3 5000 100 67890
+      assertBool ("power " ++ show rate ++ " too low") $
+        rate >= 0.95
+  , testCase "m_lo > m_hi rejected as InvalidNullInterval" $
+      case Bounded.configInterval 0.6 0.4 0.0 1.0 0.01 Bounded.Newton of
+        Left (C.InvalidNullInterval _ _ _ _) -> pure ()
+        Left e  -> assertFailure ("wrong error: " ++ show e)
+        Right _ -> assertFailure "expected Left"
+  , testCase "m_lo == lo rejected" $
+      case Bounded.configInterval 0.0 0.5 0.0 1.0 0.01 Bounded.Newton of
+        Left (C.InvalidNullInterval _ _ _ _) -> pure ()
+        Left e  -> assertFailure ("wrong error: " ++ show e)
+        Right _ -> assertFailure "expected Left"
+  , testCase "m_hi == hi rejected" $
+      case Bounded.configInterval 0.5 1.0 0.0 1.0 0.01 Bounded.Newton of
+        Left (C.InvalidNullInterval _ _ _ _) -> pure ()
+        Left e  -> assertFailure ("wrong error: " ++ show e)
+        Right _ -> assertFailure "expected Left"
+  , testCase "NaN endpoint rejected" $
+      case Bounded.configInterval (0 / 0) 0.5 0.0 1.0 0.01 Bounded.Newton of
+        Left (C.InvalidNullInterval _ _ _ _) -> pure ()
+        Left e  -> assertFailure ("wrong error: " ++ show e)
+        Right _ -> assertFailure "expected Left"
   ]
 
 -- two-sample paired test -----------------------------------------------------
