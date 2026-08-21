@@ -22,6 +22,22 @@
 -- streams the conditional statement is the right thing to think
 -- about.
 --
+-- 'configInterval' generalises the null from a point to an
+-- interval:
+--
+--     @H_0: m_lo <= E[x_t | F_{t-1}] <= m_hi   for all t@
+--
+-- The positive-direction process is centred at @m_hi@ and the
+-- negative-direction process at @m_lo@, so each side's wealth is a
+-- nonnegative supermartingale under /every/ conditional mean in
+-- the interval, and the convex-hedge guarantee carries over
+-- unchanged. The point null is the degenerate case
+-- @m_lo = m_hi@. An interval null buys tolerance: a systematic
+-- effect smaller than the interval half-width accumulates no
+-- evidence, which is the honest null when the measurement channel
+-- itself carries a small, bounded systematic that is not the
+-- effect under test.
+--
 -- Internally two one-sided e-processes are run in parallel: a
 -- /positive-direction/ process @K^+_t@ betting against the
 -- alternative @E[x_t | F_{t-1}] > m@ (using centred observations
@@ -75,6 +91,7 @@ module Numeric.Eproc.Bounded (
 
   -- * Construction
   , config
+  , configInterval
   , initial
 
   -- * Streaming
@@ -100,16 +117,20 @@ import Numeric.Eproc.Common (
 -- types ----------------------------------------------------------------------
 
 -- here, the centred observation @z_t@ referenced in
--- "Numeric.Eproc.Common" is @x_t - m@; the per-direction safe-bet
--- ceilings @lambda_max@ are derived from the sample bounds (see
--- 'config').
+-- "Numeric.Eproc.Common" is per-direction: @x_t - m_hi@ for the
+-- positive side and @x_t - m_lo@ for the negative side, with
+-- @m_lo = m_hi@ under a point null ('config'). The per-direction
+-- safe-bet ceilings @lambda_max@ are derived from the sample
+-- bounds (see 'config' \/ 'configInterval').
 
--- | Bounded-mean test configuration. Build with 'config'.
+-- | Bounded-mean test configuration. Build with 'config' (point
+--   null) or 'configInterval' (interval null).
 --
---   Carries the bettor strategy, the null mean, the significance
---   level, the precomputed convex-hedge log-wealth threshold, and
---   the per-direction safe-bet ceilings (see 'config' for how the
---   latter are derived from the sample bounds).
+--   Carries the bettor strategy, the null-mean endpoints (equal
+--   under a point null), the significance level, the precomputed
+--   convex-hedge log-wealth threshold, and the per-direction
+--   safe-bet ceilings (see 'config' for how the latter are derived
+--   from the sample bounds).
 data Config = Config {
     -- ^ bettor strategy
     cfg_bettor      :: !Bettor
@@ -117,8 +138,10 @@ data Config = Config {
   , cfg_lam_max_pos :: {-# UNPACK #-} !Double
     -- ^ negative-direction safe-bet ceiling
   , cfg_lam_max_neg :: {-# UNPACK #-} !Double
-    -- ^ null mean @m@
-  , cfg_null_mean   :: {-# UNPACK #-} !Double
+    -- ^ lower null mean @m_lo@ (negative-direction centre)
+  , cfg_null_lo     :: {-# UNPACK #-} !Double
+    -- ^ upper null mean @m_hi@ (positive-direction centre)
+  , cfg_null_hi     :: {-# UNPACK #-} !Double
     -- ^ significance level @alpha@
   , cfg_alpha       :: {-# UNPACK #-} !Double
     -- ^ rejection threshold @log(2 \/ alpha)@
@@ -189,15 +212,66 @@ config !m !lo !hi !alpha !b
       Left (InvalidBounds lo hi)
   | not (finite m && lo < m && m < hi) =
       Left (InvalidNullMean m lo hi)
-  | otherwise = Right Config {
-        cfg_bettor      = b
-      , cfg_lam_max_pos = 0.5 / (m - lo)
-      , cfg_lam_max_neg = 0.5 / (hi - m)
-      , cfg_null_mean   = m
-      , cfg_alpha       = alpha
-      , cfg_log_thresh  = log (2 / alpha)
-      }
+  | otherwise = Right (mk_config m m lo hi alpha b)
 {-# INLINE config #-}
+
+-- | Build a 'Config' for the interval-null bounded-mean test
+--
+--     @H_0: m_lo <= E[x_t | F_{t-1}] <= m_hi   for all t@
+--
+--   The positive-direction process centres its observations at
+--   @m_hi@ (betting against @E[x] > m_hi@) and the
+--   negative-direction process at @m_lo@ (betting against
+--   @E[x] < m_lo@). Each side's wealth factor has conditional
+--   expectation at most @1@ under every mean in the interval, so
+--   the convex-hedge combination and its @log(2 \/ alpha)@
+--   threshold apply exactly as under a point null. The safe-bet
+--   ceilings generalise accordingly: @lambda_p <= 1 \/ (m_hi - lo)@
+--   and @lambda_n <= 1 \/ (hi - m_lo)@, each halved for numerical
+--   margin as in 'config'.
+--
+--   A conditional mean strictly inside the interval makes both
+--   sides strict supermartingales, so the test is conservative in
+--   the interior and tightest at the endpoints — where the type-I
+--   guarantee is still @alpha@.
+--
+--   @configInterval m m@ is equivalent to @config m@; passing
+--   @m_lo > m_hi@, or endpoints outside the open sample interval,
+--   returns 'Left' 'InvalidNullInterval'. Other inputs are
+--   validated as in 'config'.
+--
+--   >>> let Right cfg = configInterval 0.45 0.55 0.0 1.0 1.0e-3 Newton
+configInterval
+  :: Double  -- ^ lower null mean @m_lo@
+  -> Double  -- ^ upper null mean @m_hi@
+  -> Double  -- ^ sample lower bound @lo@
+  -> Double  -- ^ sample upper bound @hi@
+  -> Double  -- ^ significance level @alpha@
+  -> Bettor  -- ^ bettor strategy
+  -> Either ConfigError Config
+configInterval !mlo !mhi !lo !hi !alpha !b
+  | not (finite alpha && alpha > 0 && alpha < 1) =
+      Left (InvalidAlpha alpha)
+  | not (finite lo && finite hi && lo < hi) =
+      Left (InvalidBounds lo hi)
+  | not (finite mlo && finite mhi && lo < mlo && mlo <= mhi && mhi < hi) =
+      Left (InvalidNullInterval mlo mhi lo hi)
+  | otherwise = Right (mk_config mlo mhi lo hi alpha b)
+{-# INLINE configInterval #-}
+
+-- shared constructor behind 'config' and 'configInterval'; assumes
+-- its arguments already validated.
+mk_config :: Double -> Double -> Double -> Double -> Double -> Bettor -> Config
+mk_config !mlo !mhi !lo !hi !alpha !b = Config {
+    cfg_bettor      = b
+  , cfg_lam_max_pos = 0.5 / (mhi - lo)
+  , cfg_lam_max_neg = 0.5 / (hi - mlo)
+  , cfg_null_lo     = mlo
+  , cfg_null_hi     = mhi
+  , cfg_alpha       = alpha
+  , cfg_log_thresh  = log (2 / alpha)
+  }
+{-# INLINE mk_config #-}
 
 -- | The initial 'State' for a fresh streaming test.
 --
@@ -224,31 +298,35 @@ initial Config{..} =
 
 -- | Fold one observation into the running 'State'.
 --
---   Computes the centred observation @z = x - m@, queries the two
---   directional bettors for their predictable bets, accumulates
---   per-direction log-wealth via
+--   Computes the per-direction centred observations
+--   @z_p = x - m_hi@ and @z_n = x - m_lo@ (identical under a point
+--   null, where @m_lo = m_hi = m@), queries the two directional
+--   bettors for their predictable bets, accumulates per-direction
+--   log-wealth via
 --
 --       @log_w' = log_w + log (1 + lambda * z)@
 --
 --   (with the symmetric @-lambda@ for the negative direction), then
 --   updates the running supremum of @log(K^+ + K^-)@ via
 --   log-sum-exp and steps the bettor states given the newly
---   observed @z@.
+--   observed centred values.
 --
 --   /Precondition/: @x@ must lie in the @[lo, hi]@ interval given
---   to 'config'. The type-I error guarantee of the test depends on
---   this. Out-of-range observations can drive the wealth factor
---   negative, taking the construction out of the supermartingale
---   regime entirely; the function does not check for this.
+--   to 'config' \/ 'configInterval'. The type-I error guarantee of
+--   the test depends on this. Out-of-range observations can drive
+--   the wealth factor negative, taking the construction out of the
+--   supermartingale regime entirely; the function does not check
+--   for this.
 --
 --   >>> let s1 = update cfg s0 0.7
 update :: Config -> State -> Double -> State
 update Config{..} State{..} !x =
-  let !z       = x - cfg_null_mean
+  let !zp      = x - cfg_null_hi
+      !zn      = x - cfg_null_lo
       !lam_p   = bet_lambda cfg_bettor cfg_lam_max_pos st_bet_pos
       !lam_n   = bet_lambda cfg_bettor cfg_lam_max_neg st_bet_neg
-      !logw_p  = st_log_w_pos + log1p (lam_p * z)
-      !logw_n  = st_log_w_neg + log1p (negate lam_n * z)
+      !logw_p  = st_log_w_pos + log1p (lam_p * zp)
+      !logw_n  = st_log_w_neg + log1p (negate lam_n * zn)
       -- Skip 'log_sum_exp' when the cheap upper bound
       --   log_sum_exp a b <= max a b + log 2
       -- already sits at or below the running max: no update can
@@ -258,8 +336,8 @@ update Config{..} State{..} !x =
         | cheap_ub <= st_sup_log_sum = st_sup_log_sum
         | otherwise                  =
             max st_sup_log_sum (log_sum_exp logw_p logw_n)
-      !sp      = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos z
-      !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate z)
+      !sp      = step_bet cfg_bettor cfg_lam_max_pos st_bet_pos zp
+      !sn      = step_bet cfg_bettor cfg_lam_max_neg st_bet_neg (negate zn)
   in  State (st_n + 1) logw_p logw_n sup_sum sp sn
 {-# INLINE update #-}
 

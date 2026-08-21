@@ -112,6 +112,7 @@ data Verdict =
 
 -- | Reasons that a test-configuration smart constructor can reject
 --   its inputs. Returned by 'Numeric.Eproc.Bounded.config',
+--   'Numeric.Eproc.Bounded.configInterval',
 --   'Numeric.Eproc.Bernoulli.config',
 --   'Numeric.Eproc.Paired.config',
 --   'Numeric.Eproc.Mixture.config', and
@@ -125,6 +126,14 @@ data ConfigError =
     --   in the safe-bet ceilings)
   | InvalidNullMean
       {-# UNPACK #-} !Double  -- m
+      {-# UNPACK #-} !Double  -- lo
+      {-# UNPACK #-} !Double  -- hi
+    -- | null-interval endpoints violate @lo < m_lo <= m_hi < hi@
+    --   (strict at the sample bounds, to avoid div-by-zero in the
+    --   safe-bet ceilings)
+  | InvalidNullInterval
+      {-# UNPACK #-} !Double  -- m_lo
+      {-# UNPACK #-} !Double  -- m_hi
       {-# UNPACK #-} !Double  -- lo
       {-# UNPACK #-} !Double  -- hi
     -- | baseline rate outside @(0, 1)@
