@@ -4,67 +4,71 @@
 ![](https://img.shields.io/badge/license-MIT-brightgreen)
 [![](https://img.shields.io/badge/haddock-eproc-lightblue)](https://docs.ppad.tech/eproc)
 
-Anytime-valid sequential hypothesis testing and confidence sequences
-for bounded random variables, via the e-process / betting framework
-of [Waudby-Smith & Ramdas (2024)][wsr24].
+A pure Haskell implementation of anytime-valid sequential hypothesis
+tests and confidence sequences for bounded random variables, via the
+e-process ("testing by betting") framework of [Waudby-Smith & Ramdas
+(2024)][wsr24].
+
+Observations are consumed one at a time. Unlike with classical tests,
+you can check the verdict (or the confidence interval) after every
+observation and stop whenever you like, without inflating the error
+rate.
+
+Includes tests for bounded means, paired differences, and Bernoulli
+rates, mixtures of such tests, and confidence sequences for bounded
+means.
 
 ## Usage
 
 A sample GHCi session:
 
 ```
-  > import qualified Numeric.Eproc.Bounded as Bounded
+  > -- import qualified
+  > import qualified Numeric.Eproc.Bounded as B
+  > import Data.List (find)
   >
-  > -- hypothesis: E[X] = 0.5 for samples in [0, 1] at alpha = 1e-3, tested
-  > -- with the Newton bettor. 'config' returns 'Either ConfigError Config'
-  > -- and refuses inputs outside the mathematical regime.
-  > let Right cfg = Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton
-  > let s0        = Bounded.initial cfg
+  > -- test H_0: E[x] = 0.5 for x in [0, 1], at level 0.001
+  > let Right cfg = B.config 0.5 0.0 1.0 1.0e-3 B.Newton
   >
-  > -- ten observations (drifting from hypothesis), and state afterwards
-  > let xs  = [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]
-  > let s10 = foldl' (Bounded.update cfg) s0 xs
+  > -- a stream of observations with mean 0.8
+  > let xs = cycle [1, 1, 0, 1, 1, 0, 1, 1, 1, 1]
   >
-  > -- inspect current and supremum-so-far log-wealth, and the stopping
-  > -- decision, at any point
-  > Bounded.log_wealth s10
-  0.6187772969384595
-  > Bounded.log_wealth_sup s10
-  0.916290731874155
-  > Bounded.decide cfg s10
+  > -- after ten observations, the evidence is weak
+  > let s10 = foldl' (B.update cfg) (B.initial cfg) (take 10 xs)
+  > B.decide cfg s10
   Continue
+  > B.p_value s10
+  0.8
   >
-  > -- with enough evidence, the hypothesis is rejected
-  > let s300 = foldl' (Bounded.update cfg) s0 (concat (replicate 30 xs))
-  > Bounded.log_wealth_sup s300
-  51.14271142862292
-  > Bounded.decide cfg s300
-  Reject
+  > -- check after every observation, stopping at the first rejection
+  > let ss = scanl (B.update cfg) (B.initial cfg) xs
+  > let Just s = find ((== B.Reject) . B.decide cfg) ss
+  > B.samples s
+  59
+  > B.p_value s
+  8.474770976464489e-4
 ```
 
-Confidence sequences invert the same machinery into time-uniform
-interval estimates: valid at every sample size simultaneously, so you
-can watch the interval shrink and stop whenever it's tight enough:
+Confidence sequences are the estimation analogue: intervals that are
+valid at every sample size simultaneously. Continuing from the above:
 
 ```
-  > import qualified Numeric.Eproc.ConfSeq as CS
+  > import qualified Numeric.Eproc.ConfSeq as C
   >
-  > -- estimate a mean in [0, 1] at 95% coverage, on a 100-point grid
-  > let Right cfg = CS.config 0.0 1.0 0.05 100
-  > let s0        = CS.initial cfg
+  > -- 95% confidence sequence for the mean of x in [0, 1], on a
+  > -- 100-point grid
+  > let Right cfg = C.config 0.0 1.0 0.05 100
+  > let after n = foldl' (C.update cfg) (C.initial cfg) (take n xs)
   >
-  > -- the same drifting stream as above; the interval closes in on
-  > -- its empirical mean of 0.8
-  > let xs = concat (replicate 30 [1, 1, 0, 1, 1, 0, 1, 1, 1, 1])
-  > CS.interval cfg (foldl' (CS.update cfg) s0 xs)
-  Just (0.7227722772277227,0.8712871287128713)
+  > C.interval cfg (after 10)
+  Just (0.3564356435643564,1.0)
+  > C.interval cfg (after 100)
+  Just (0.6633663366336634,0.9108910891089109)
+  > C.interval cfg (after 1000)
+  Just (0.7425742574257426,0.8514851485148515)
 ```
 
-Every test module also reports its evidence as an anytime-valid
-p-value (`p_value`) and a normalized log e-value (`log_evalue`); the
-`Mixture` module combines several e-processes into a single test with
-power against a union of alternatives (see its haddocks for a worked
-sign-plus-magnitude example).
+See the haddocks for additional examples.
 
 ## Documentation
 
@@ -73,50 +77,39 @@ Haddocks (API documentation, etc.) are hosted at
 
 ## Performance
 
-The aim is best-in-class performance for pure, highly-auditable Haskell
-code.
-
 Current benchmark figures on an M4 Silicon MacBook Air look like (use
 `cabal bench` to run the benchmark suite):
 
 ```
   benchmarking Bounded.update (one step)/newton
-  time                 13.96 ns   (13.88 ns .. 14.04 ns)
+  time                 15.27 ns   (15.23 ns .. 15.30 ns)
 
   benchmarking Bounded.update (1000-sample fold)/fixed
-  time                 7.951 μs   (7.944 μs .. 7.959 μs)
+  time                 8.271 μs   (8.266 μs .. 8.275 μs)
 
   benchmarking Bounded.update (1000-sample fold)/adaptive
-  time                 12.69 μs   (12.68 μs .. 12.71 μs)
+  time                 15.38 μs   (15.35 μs .. 15.41 μs)
 
   benchmarking Bounded.update (1000-sample fold)/newton
-  time                 14.61 μs   (14.57 μs .. 14.64 μs)
+  time                 17.00 μs   (16.98 μs .. 17.02 μs)
 
   benchmarking Bernoulli.update (1000-sample fold)/newton
-  time                 14.64 μs   (14.63 μs .. 14.65 μs)
+  time                 14.85 μs   (14.84 μs .. 14.87 μs)
 
   benchmarking Bernoulli.TwoSided.update (1000-sample fold)/newton
-  time                 14.83 μs   (14.81 μs .. 14.84 μs)
+  time                 16.70 μs   (16.68 μs .. 16.72 μs)
 
   benchmarking Mixture.update (one step)/K=4
-  time                 31.38 ns   (31.21 ns .. 31.55 ns)
+  time                 22.24 ns   (22.21 ns .. 22.27 ns)
 
   benchmarking ConfSeq.update (one step, g = 200)/plug-in
-  time                 2.121 μs   (2.118 μs .. 2.124 μs)
+  time                 2.100 μs   (2.097 μs .. 2.103 μs)
 
   benchmarking ConfSeq.update (1000-sample fold, g = 200)/plug-in
-  time                 241.2 μs   (239.7 μs .. 243.2 μs)
+  time                 193.3 μs   (192.3 μs .. 194.5 μs)
 ```
 
-The `Paired` and `Bernoulli.TwoSided` modules are thin newtype
-wrappers over `Bounded`, and inline through with no measurable
-overhead. `ConfSeq` updates cost O(live grid candidates) per
-observation, so long streams get cheaper as candidates are rejected
-(visible in the sub-linear fold figure above). See the criterion
-suite for the full breakdown across `Fixed` / `Adaptive` / `Newton`
-bettors and per-step / fold workloads.
-
-You should compile with the `llvm` flag for maximum performance.
+You should compile with the 'llvm' flag for maximum performance.
 
 ## Development
 
@@ -139,7 +132,7 @@ to get a REPL for the main library.
 
 - Waudby-Smith & Ramdas (2024), "[Estimating means of bounded random
   variables by betting][wsr24]." JRSS-B.
-- Ramdas, Grunwald, Vovk, Shafer (2023), "[Game-theoretic statistics
+- Ramdas, Grünwald, Vovk, Shafer (2023), "[Game-theoretic statistics
   and safe anytime-valid inference][rgvs23]." Statistical Science.
 - Shafer (2021), "[Testing by betting][shafer21]." JRSS-A.
 
