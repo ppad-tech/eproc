@@ -105,6 +105,7 @@ module Numeric.Eproc.Mixture (
   , samples
   ) where
 
+import qualified Data.List as L
 import Numeric.Eproc.Common (Verdict(..), ConfigError(..), finite)
 
 -- types ----------------------------------------------------------------------
@@ -201,8 +202,8 @@ update :: Config -> State -> [Double] -> State
 update _ st@State{..} les = case les of
   []       -> st
   (l : ls) ->
-    let !m = foldl' max l ls
-        !s = foldl' (\ !acc v -> acc + exp (v - m)) 0 les
+    let !m = L.foldl' max l ls
+        !s = L.foldl' (\ !acc v -> acc + exp (v - m)) 0 les
         -- all components at e-value zero: the mixture log-sum is
         -- -Infinity, and (m +) would poison it into NaN.
         !cur | isInfinite m && m < 0 = m

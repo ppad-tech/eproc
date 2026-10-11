@@ -4,6 +4,7 @@
 module Main where
 
 import Control.DeepSeq
+import qualified Data.List as L
 import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
@@ -73,7 +74,7 @@ stream =
       !cfg_f = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5))
       !cfg_a = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive)
       !cfg_o = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton)
-      run_m cfg = foldl' (Bounded.update cfg) (Bounded.initial cfg)
+      run_m cfg = L.foldl' (Bounded.update cfg) (Bounded.initial cfg)
   in  bgroup "Bounded.update (1000-sample fold)" [
           bench "fixed"    $ nf (run_m cfg_f) xs
         , bench "adaptive" $ nf (run_m cfg_a) xs
@@ -86,7 +87,7 @@ twosample =
       !cfg_f = ok (P.config 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5))
       !cfg_a = ok (P.config 0.0 1.0 1.0e-3 Bounded.Adaptive)
       !cfg_o = ok (P.config 0.0 1.0 1.0e-3 Bounded.Newton)
-      run_t cfg = foldl' (P.update cfg) (P.initial cfg)
+      run_t cfg = L.foldl' (P.update cfg) (P.initial cfg)
   in  bgroup "Paired.update (1000-sample fold)" [
           bench "fixed"    $ nf (run_t cfg_f) ps
         , bench "adaptive" $ nf (run_t cfg_a) ps
@@ -113,7 +114,7 @@ bern_stream =
       !cfg_f = ok (Bern.config 0.05 1.0e-3 (Bern.Fixed 5.0))
       !cfg_a = ok (Bern.config 0.05 1.0e-3 Bern.Adaptive)
       !cfg_o = ok (Bern.config 0.05 1.0e-3 Bern.Newton)
-      run_b cfg = foldl' (Bern.update cfg) (Bern.initial cfg)
+      run_b cfg = L.foldl' (Bern.update cfg) (Bern.initial cfg)
   in  bgroup "Bernoulli.update (1000-sample fold)" [
           bench "fixed"    $ nf (run_b cfg_f) xs
         , bench "adaptive" $ nf (run_b cfg_a) xs
@@ -140,7 +141,7 @@ bern_ts_stream =
       !cfg_f = ok (BernTS.config 0.5 1.0e-3 (BernTS.Fixed 1.0))
       !cfg_a = ok (BernTS.config 0.5 1.0e-3 BernTS.Adaptive)
       !cfg_o = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
-      run_b cfg = foldl' (BernTS.update cfg) (BernTS.initial cfg)
+      run_b cfg = L.foldl' (BernTS.update cfg) (BernTS.initial cfg)
   in  bgroup "Bernoulli.TwoSided.update (1000-sample fold)" [
           bench "fixed"    $ nf (run_b cfg_f) xs
         , bench "adaptive" $ nf (run_b cfg_a) xs
@@ -161,7 +162,7 @@ mix_stream =
   let !vs  = force (take 1000 (cycle
                [[0.1, -0.2, 0.3, 0.0], [-0.3, 0.2, 0.0, 0.1]]))
       !cfg = ok (Mix.config 4 1.0e-3)
-      run_x c = foldl' (Mix.update c) (Mix.initial c)
+      run_x c = L.foldl' (Mix.update c) (Mix.initial c)
   in  bgroup "Mixture.update (1000-step fold)" [
           bench "K=4" $ nf (run_x cfg) vs
         ]
@@ -184,7 +185,7 @@ confseq_stream :: Benchmark
 confseq_stream =
   let !xs  = force (take 1000 (cycle [0.3, 0.7]))
       !cfg = ok (CS.config 0.0 1.0 0.05 200)
-      run_c = foldl' (CS.update cfg) (CS.initial cfg)
+      run_c = L.foldl' (CS.update cfg) (CS.initial cfg)
   in  bgroup "ConfSeq.update (1000-sample fold, g = 200)" [
           bench "plug-in" $ nf run_c xs
         ]

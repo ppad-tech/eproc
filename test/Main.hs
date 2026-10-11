@@ -3,6 +3,7 @@
 module Main where
 
 import Data.Bits
+import qualified Data.List as L
 import Data.Word
 import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
@@ -159,7 +160,7 @@ sanity_tests = testGroup "sanity" [
     testCase "degenerate input never rejects" $ do
       let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton)
           xs = replicate 5000 0.5
-          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+          st = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       Bounded.decide cfg st @?= Bounded.Continue
   , testCase "two-sided thresholds applied symmetrically" $ do
       let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton)
@@ -213,8 +214,8 @@ interval_tests = testGroup "interval null" [
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfgP = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
             cfgI = ok (Bounded.configInterval 0.5 0.5 0.0 1.0 1.0e-3 b)
-            stP  = foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
-            stI  = foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
+            stP  = L.foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
+            stI  = L.foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
         in  Bounded.log_wealth stP == Bounded.log_wealth stI &&
             Bounded.log_wealth_sup stP == Bounded.log_wealth_sup stI
   , testCase "interior systematic tolerated where point null rejects" $ do
@@ -225,8 +226,8 @@ interval_tests = testGroup "interval null" [
                        1.0e-6 Bounded.Newton)
           cfgP = ok (Bounded.config 0.5 0.0 1.0 1.0e-6 Bounded.Newton)
           xs   = replicate 5000 0.52
-          stI  = foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
-          stP  = foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
+          stI  = L.foldl' (Bounded.update cfgI) (Bounded.initial cfgI) xs
+          stP  = L.foldl' (Bounded.update cfgP) (Bounded.initial cfgP) xs
       Bounded.decide cfgI stI @?= Bounded.Continue
       Bounded.decide cfgP stP @?= Bounded.Reject
   , testCase "calibration at the null boundary (p = m_hi)" $ do
@@ -332,7 +333,7 @@ bernoulli_tests = testGroup "bernoulli" [
     testCase "all-zero stream never rejects" $ do
       let cfg = ok (Bern.config 0.05 1.0e-6 Bern.Newton)
           xs  = replicate 5000 False
-          st  = foldl' (Bern.update cfg) (Bern.initial cfg) xs
+          st  = L.foldl' (Bern.update cfg) (Bern.initial cfg) xs
       Bern.decide cfg st @?= Bern.Continue
   , testCase "Newton FPR under H_0 (p = p_0 = 0.05)" $ do
       let cfg  = ok (Bern.config 0.05 0.05 Bern.Newton)
@@ -365,32 +366,32 @@ bettor_smoke_tests = testGroup "bettor smoke" [
     testCase "fixed bettor runs without error (bounded)" $ do
       let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 (Bounded.Fixed 0.5))
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+          st = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)
   , testCase "Newton bettor runs without error (bounded)" $ do
       let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Newton)
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+          st = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)
   , testCase "Adaptive bettor runs without error (bounded)" $ do
       let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 Bounded.Adaptive)
           xs = take 100 (cycle [0.0, 1.0])
-          st = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+          st = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
       assertBool "samples advanced" (Bounded.samples st == 100)
   , testCase "fixed bettor runs without error (bernoulli)" $ do
       let cfg = ok (Bern.config 0.5 1.0e-3 (Bern.Fixed 0.5))
           xs = take 100 (cycle [True, False])
-          st = foldl' (Bern.update cfg) (Bern.initial cfg) xs
+          st = L.foldl' (Bern.update cfg) (Bern.initial cfg) xs
       assertBool "samples advanced" (Bern.samples st == 100)
   , testCase "Newton bettor runs without error (bernoulli)" $ do
       let cfg = ok (Bern.config 0.5 1.0e-3 Bern.Newton)
           xs = take 100 (cycle [True, False])
-          st = foldl' (Bern.update cfg) (Bern.initial cfg) xs
+          st = L.foldl' (Bern.update cfg) (Bern.initial cfg) xs
       assertBool "samples advanced" (Bern.samples st == 100)
   , testCase "Adaptive bettor runs without error (bernoulli)" $ do
       let cfg = ok (Bern.config 0.5 1.0e-3 Bern.Adaptive)
           xs = take 100 (cycle [True, False])
-          st = foldl' (Bern.update cfg) (Bern.initial cfg) xs
+          st = L.foldl' (Bern.update cfg) (Bern.initial cfg) xs
       assertBool "samples advanced" (Bern.samples st == 100)
   ]
 
@@ -408,16 +409,16 @@ latched_rejection_tests = testGroup "latched rejection" [
       let cfg  = ok (Bounded.config 0.5 0.0 1.0 0.5 (Bounded.Fixed 1.0))
           xs1  = replicate 5 1.0
           xs2  = replicate 40 0.0
-          st1  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs1
-          st2  = foldl' (Bounded.update cfg) st1 xs2
+          st1  = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs1
+          st2  = L.foldl' (Bounded.update cfg) st1 xs2
       Bounded.decide cfg st1 @?= Bounded.Reject
       Bounded.decide cfg st2 @?= Bounded.Reject
   , testCase "bernoulli: cross then drown stays rejected" $ do
       let cfg  = ok (Bern.config 0.05 0.5 (Bern.Fixed 1.0))
           xs1  = replicate 5 True
           xs2  = replicate 200 False
-          st1  = foldl' (Bern.update cfg) (Bern.initial cfg) xs1
-          st2  = foldl' (Bern.update cfg) st1 xs2
+          st1  = L.foldl' (Bern.update cfg) (Bern.initial cfg) xs1
+          st2  = L.foldl' (Bern.update cfg) st1 xs2
       Bern.decide cfg st1 @?= Bern.Reject
       Bern.decide cfg st2 @?= Bern.Reject
   ]
@@ -516,7 +517,7 @@ two_sided_bernoulli_tests = testGroup "two-sided bernoulli" [
       let cfg = ok (BernTS.config 0.5 1.0e-6 BernTS.Newton)
           -- alternating True/False keeps the empirical rate at 0.5.
           xs  = take 5000 (cycle [True, False])
-          st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) xs
+          st  = L.foldl' (BernTS.update cfg) (BernTS.initial cfg) xs
       BernTS.decide cfg st @?= BernTS.Continue
   , testCase "detects upward shift (p = 0.7 vs p_0 = 0.5)" $ do
       let cfg  = ok (BernTS.config 0.5 1.0e-3 BernTS.Newton)
@@ -545,8 +546,8 @@ two_sided_bernoulli_tests = testGroup "two-sided bernoulli" [
           -- then two hundred 0s drop the current wealth, but the
           -- latch must hold.
           xs2  = replicate 200 False
-          st1  = foldl' (BernTS.update cfg) (BernTS.initial cfg) xs1
-          st2  = foldl' (BernTS.update cfg) st1 xs2
+          st1  = L.foldl' (BernTS.update cfg) (BernTS.initial cfg) xs1
+          st2  = L.foldl' (BernTS.update cfg) st1 xs2
       BernTS.decide cfg st1 @?= BernTS.Reject
       BernTS.decide cfg st2 @?= BernTS.Reject
   , testCase "config: NaN p0 rejected" $ do
@@ -596,7 +597,7 @@ safety_property_tests = testGroup "safety properties" [
       QC.forAll arb_bettor $ \b ->
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
-            st  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+            st  = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
         in  finite (Bounded.log_wealth st) &&
             finite (Bounded.log_wealth_sup st)
 
@@ -604,21 +605,21 @@ safety_property_tests = testGroup "safety properties" [
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (Bern.config 0.05 1.0e-3 b)
-            st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
+            st  = L.foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
         in  finite (Bern.log_wealth st) && finite (Bern.log_wealth_sup st)
 
   , QC.testProperty "Bounded: Fixed with arbitrary lambda is safe" $
       QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 (C.Fixed lam))
-            st  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+            st  = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
         in  finite (Bounded.log_wealth st)
 
   , QC.testProperty "Bernoulli: Fixed with arbitrary lambda is safe" $
       QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (Bern.config 0.05 1.0e-3 (C.Fixed lam))
-            st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
+            st  = L.foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
         in  finite (Bern.log_wealth st)
 
   , QC.testProperty "Bounded: log_wealth_sup is monotone nondecreasing" $
@@ -671,14 +672,16 @@ safety_property_tests = testGroup "safety properties" [
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (BernTS.config 0.5 1.0e-3 b)
-            st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+            st  = L.foldl' (BernTS.update cfg) (BernTS.initial cfg)
+                    (xs :: [Bool])
         in  finite (BernTS.log_wealth st) && finite (BernTS.log_wealth_sup st)
 
   , QC.testProperty "BernTS: Fixed with arbitrary lambda is safe" $
       QC.forAll (QC.choose (-1000, 1000)) $ \lam ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (BernTS.config 0.5 1.0e-3 (C.Fixed lam))
-            st  = foldl' (BernTS.update cfg) (BernTS.initial cfg) (xs :: [Bool])
+            st  = L.foldl' (BernTS.update cfg) (BernTS.initial cfg)
+                    (xs :: [Bool])
         in  finite (BernTS.log_wealth st)
 
   , QC.testProperty "BernTS: log_wealth_sup is monotone nondecreasing" $
@@ -730,14 +733,14 @@ evalue_accessor_tests = testGroup "e-value accessors" [
       QC.forAll arb_bettor $ \b ->
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg = ok (Bounded.config 0.5 0.0 1.0 1.0e-3 b)
-            st  = foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
+            st  = L.foldl' (Bounded.update cfg) (Bounded.initial cfg) xs
         in  Bounded.log_evalue st == Bounded.log_wealth st - C.log2_dbl
 
   , QC.testProperty "Bernoulli: log_evalue coincides with log_wealth" $
       QC.forAll arb_bettor $ \b ->
       QC.forAll QC.arbitrary $ \xs ->
         let cfg = ok (Bern.config 0.05 1.0e-3 b)
-            st  = foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
+            st  = L.foldl' (Bern.update cfg) (Bern.initial cfg) (xs :: [Bool])
         in  Bern.log_evalue st == Bern.log_wealth st
 
   , QC.testProperty "Bounded: decide agrees with p_value at alpha" $
@@ -903,10 +906,10 @@ mixture_tests = testGroup "mixture" [
             sts  = drop 1 (scanl (Bounded.update bcfg)
                             (Bounded.initial bcfg) xs)
             les  = map Bounded.log_evalue sts
-            mix  = foldl'
+            mix  = L.foldl'
                      (\acc l -> Mix.update xcfg acc (replicate k l))
                      (Mix.initial xcfg) les
-            cfin = foldl' (Bounded.update bcfg) (Bounded.initial bcfg) xs
+            cfin = L.foldl' (Bounded.update bcfg) (Bounded.initial bcfg) xs
         in  approx_eq (Mix.log_evalue xcfg mix)
                       (Bounded.log_evalue cfin)
             && approx_eq (Mix.log_evalue_sup xcfg mix)
@@ -1019,7 +1022,7 @@ confseq_tests = testGroup "confidence sequences" [
   , testCase "consistency: Bernoulli(0.3) interval shrinks onto mean" $ do
       let cfg = ok (CS.config 0.0 1.0 1.0e-3 200)
           xs  = cs_stream 0.3 5000 (mk_gen 424242)
-          st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+          st  = L.foldl' (CS.update cfg) (CS.initial cfg) xs
       case CS.interval cfg st of
         Nothing -> assertFailure "interval empty"
         Just (l, u) -> do
@@ -1033,7 +1036,7 @@ confseq_tests = testGroup "confidence sequences" [
       let cfg = ok (CS.config (-5.0) 5.0 0.05 100)
           xs  = [ if b == 1.0 then 4.0 else (-4.0)
                 | b <- cs_stream 0.7 3000 (mk_gen 232323) ]
-          st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+          st  = L.foldl' (CS.update cfg) (CS.initial cfg) xs
       case CS.interval cfg st of
         Nothing -> assertFailure "interval empty"
         Just (l, u) -> do
@@ -1059,7 +1062,7 @@ confseq_tests = testGroup "confidence sequences" [
   , QC.testProperty "interval endpoints well-formed on any stream" $
       QC.forAll (QC.listOf unit_double) $ \xs ->
         let cfg = ok (CS.config 0.0 1.0 0.05 25)
-            st  = foldl' (CS.update cfg) (CS.initial cfg) xs
+            st  = L.foldl' (CS.update cfg) (CS.initial cfg) xs
         in  case CS.interval cfg st of
               Nothing -> True
               Just (l, u) ->
