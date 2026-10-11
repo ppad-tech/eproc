@@ -89,6 +89,7 @@ module Numeric.Eproc.ConfSeq (
   , samples
   ) where
 
+import qualified Data.List as L
 import GHC.Float (log1p)
 import Numeric.Eproc.Common (ConfigError(..), finite)
 
@@ -305,8 +306,8 @@ interval :: Config -> State -> Maybe (Double, Double)
 interval Config{..} State{..} = case st_live of
   []                  -> Nothing
   (Point j0 _ _ : ps) ->
-    let !jmin = foldl' (\acc (Point j _ _) -> min acc j) j0 ps
-        !jmax = foldl' (\acc (Point j _ _) -> max acc j) j0 ps
+    let !jmin = L.foldl' (\acc (Point j _ _) -> min acc j) j0 ps
+        !jmax = L.foldl' (\acc (Point j _ _) -> max acc j) j0 ps
         !gp1  = fromIntegral (cfg_grid + 1)
         !w    = cfg_hi - cfg_lo
         !l | jmin == 1        = cfg_lo
