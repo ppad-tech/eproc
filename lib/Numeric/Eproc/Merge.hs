@@ -51,6 +51,8 @@ import Data.Ord (Down(..), comparing)
 --   3000
 --   >>> log_mean []
 --   0.0
+--   >>> log_mean [1 / 0, 0]
+--   Infinity
 log_mean :: [Double] -> Double
 log_mean les = case les of
   [] -> 0
@@ -58,7 +60,9 @@ log_mean les = case les of
     let !m = L.foldl' max l ls
         !s = L.foldl' (\ !acc v -> acc + exp (v - m)) 0 les
         !k = fromIntegral (length les) :: Double
-    in  if isInfinite m && m < 0
+    -- an infinite e-value, of either sign, is the mean's sign too: an
+    -- e-value of zero among no greater, or one infinitely great
+    in  if isInfinite m
           then m
           else m + log s - log k
 {-# INLINE log_mean #-}

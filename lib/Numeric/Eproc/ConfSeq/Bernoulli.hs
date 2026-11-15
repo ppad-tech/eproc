@@ -25,7 +25,14 @@
 --     @C_n = { r : M_n(r) < 1 \/ alpha }@,
 --
 -- cover the true rate at every @n@ at once with probability at least
--- @1 - alpha@: inspect after every trial and stop when you like.
+-- @1 - alpha@: inspect after every trial and stop when you like. As
+-- @B(s + 1, n - s + 1) = 1 \/ ((n + 1) C(n, s))@,
+--
+--     @log M_n(r) = - log(n + 1) - log P(s; n, r)@,
+--
+-- @P@ the binomial probability, computed by Loader's saddle-point
+-- expansion (as R's @dbinom@): stable at any count, where a
+-- difference of log-factorials of size @n log n@ is not.
 -- @log M_n@ is convex in @r@ and at most zero at @s \/ n@, so @C_n@
 -- is an interval about @s \/ n@, its ends found by bisection; its
 -- half-width is about
@@ -68,6 +75,7 @@ module Numeric.Eproc.ConfSeq.Bernoulli (
   ) where
 
 import qualified Data.List as L
+import Numeric (log1p)
 
 import Numeric.Eproc.Common (ConfigError(..), finite)
 
@@ -127,7 +135,8 @@ successes = st_s
 
 -- | The confidence interval after the trials so far, @(0, 1)@ before
 --   any. Each end is the outside one of the bracket a bisection
---   leaves it in, so that the interval errs wide.
+--   leaves it in, to the precision of a double, so that the interval
+--   errs wide.
 --
 --   >>> let Right cfg = config 0.05
 --   >>> interval cfg (initial cfg)
@@ -137,36 +146,76 @@ interval Config{..} (State n s)
   | n <= 0 = (0, 1)
   | otherwise = (lower, upper)
   where
-    !sN = fromIntegral s :: Double
-    !fN = fromIntegral (n - s) :: Double
-    !phat = sN / (sN + fN)
-    !lb = log_factorial s + log_factorial (n - s) - log_factorial (n + 1)
-    inside r =
-      lb - times sN (log r) - times fN (log (1 - r)) < cfg_log_thresh
-    -- k log x, nil where k is, whatever x
-    times k x = if k == 0 then 0 else k * x
+    !phat = fromIntegral s / fromIntegral n :: Double
+    !ln1 = log (fromIntegral n + 1)
+    inside r = negate ln1 - log_binom s n r < cfg_log_thresh
     lower
       | s == 0 = 0
       | otherwise = fst (bisect 0 phat)
     upper
       | s == n = 1
       | otherwise = snd (bisect phat 1)
-    bisect lo hi = go (64 :: Int) lo hi
+    -- halving until the midpoint is one of the ends: the bracket as
+    -- narrow as doubles allow, at any scale of rate
+    bisect lo hi = go lo hi
       where
         !side = inside lo
-        go 0 x y = (x, y)
-        go i x y =
-          let !m = (x + y) / 2
-          in  if inside m == side then go (i - 1) m y else go (i - 1) x m
+        go x y =
+          let !m = x + (y - x) / 2
+          in  if m <= x || m >= y then (x, y)
+              else if inside m == side then go m y else go x m
 
--- log k!, summed below 256 and by Stirling's series above, where its
--- error is below 1e-12
-log_factorial :: Int -> Double
-log_factorial k
-  | k < 2 = 0
-  | k < 256 = L.foldl' (\acc j -> acc + log (fromIntegral j)) 0 [2 .. k]
+-- log P(s; n, r), the binomial probability of s successes in n trials
+-- at rate r, by Loader's saddle-point expansion: Stirling's error
+-- terms, the deviances of s from n r and of n - s from n (1 - r), and
+-- the normal constant
+log_binom :: Int -> Int -> Double -> Double
+log_binom s n r
+  | s == 0 = nN * log1p (negate r)
+  | s == n = nN * log r
   | otherwise =
-      let !x = fromIntegral k :: Double
-          !tau = 2 * pi
-      in  x * log x - x + 0.5 * log (tau * x)
-            + 1 / (12 * x) - 1 / (360 * x * x * x)
+      stirlerr n - stirlerr s - stirlerr (n - s)
+        - bd0 sN (nN * r) - bd0 fN (nN * (1 - r))
+        + 0.5 * log (nN / (tau * sN * fN))
+  where
+    !nN = fromIntegral n :: Double
+    !sN = fromIntegral s :: Double
+    !fN = fromIntegral (n - s) :: Double
+
+-- the deviance x log(x / np) + np - x, by its series where x is near
+-- np, where the direct form cancels
+bd0 :: Double -> Double -> Double
+bd0 !x !np
+  | abs (x - np) < 0.1 * (x + np) =
+      let !v = (x - np) / (x + np)
+          go !acc !ej !j =
+            let !ej' = ej * v * v
+                !acc' = acc + ej' / (2 * j + 1)
+            in  if acc' == acc then acc' else go acc' ej' (j + 1)
+      in  go ((x - np) * v) (2 * x * v) (1 :: Double)
+  | otherwise = x * log (x / np) + np - x
+
+-- Stirling's error, log k! - (k log k - k + log(tau k) / 2), for k at
+-- least one: directly below 16, by its series above
+stirlerr :: Int -> Double
+stirlerr k
+  | k < 16 = log_factorial k - (x * log x - x + 0.5 * log (tau * x))
+  | k > 500 = (s0 - s1 / xx) / x
+  | k > 80 = (s0 - (s1 - s2 / xx) / xx) / x
+  | k > 35 = (s0 - (s1 - (s2 - s3 / xx) / xx) / xx) / x
+  | otherwise = (s0 - (s1 - (s2 - (s3 - s4 / xx) / xx) / xx) / xx) / x
+  where
+    !x = fromIntegral k :: Double
+    !xx = x * x
+    s0 = 1 / 12
+    s1 = 1 / 360
+    s2 = 1 / 1260
+    s3 = 1 / 1680
+    s4 = 1 / 1188
+
+-- log k!, for small k
+log_factorial :: Int -> Double
+log_factorial k = L.foldl' (\acc j -> acc + log (fromIntegral j)) 0 [2 .. k]
+
+tau :: Double
+tau = 2 * pi

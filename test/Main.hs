@@ -3,6 +3,7 @@
 module Main where
 
 import Data.Bits
+import Numeric (expm1)
 import qualified Data.List as L
 import Data.Word
 import qualified Numeric.Eproc.Bernoulli as Bern
@@ -1091,6 +1092,9 @@ merge_tests = testGroup "merge" [
         abs (exp (Merge.log_mean [log 2, log 4]) - 3) < 1.0e-12
   , testCase "the mean of nil e-values is nil" $
       Merge.log_mean [log 0, log 0] @?= log 0
+  , testCase "an infinite e-value's mean is infinite" $ do
+      Merge.log_mean [1 / 0, 0] @?= 1 / 0
+      Merge.ebh 0.05 [1 / 0, 0] @?= [0]
   , testCase "a product of e-values" $
       assertBool "product of 2 and 3 is not 6" $
         abs (Merge.log_product [log 2, log 3] - log 6) < 1.0e-12
@@ -1141,6 +1145,34 @@ bernoulli_confseq_tests = testGroup "bernoulli confidence sequence" [
             (take 200 (fmap (csb_misses cfg 0.01 2000)
                             (gen_seq (mk_gen 515151)))))
       assertBool ("missed " ++ show misses ++ " of 200") $ misses <= 16
+  , testCase "no successes in very many trials: the exact end" $
+      -- with s = 0 the end solves -log(n + 1) - n log(1 - r) =
+      -- log(1 / alpha) in closed form
+      mapM_ (\n -> do
+        let cfg = ok (CSB.config 0.05)
+            Just st = CSB.from_counts 0 n
+            (_, hi) = CSB.interval cfg st
+            nd = fromIntegral n :: Double
+            exact = negate (expm1 (negate (log 20 + log (nd + 1)) / nd))
+        assertBool (show (n, hi, exact)) $
+          abs (hi - exact) / exact < 1.0e-9)
+        [10, 1000, 10 ^ (6 :: Int), 10 ^ (12 :: Int), 10 ^ (16 :: Int)]
+  , testCase "all successes in very many trials: the exact end" $ do
+      let cfg = ok (CSB.config 0.05)
+          n = 10 ^ (16 :: Int)
+          Just st = CSB.from_counts n n
+          (lo, _) = CSB.interval cfg st
+          nd = fromIntegral n :: Double
+          exact = exp (negate (log 20 + log (nd + 1)) / nd)
+      assertBool (show (lo, exact)) $ abs (lo - exact) < 1.0e-12
+  , testCase "a rate in very many trials: an interval about it" $ do
+      -- 3 in 10 of 10^15 trials: an interval of half-width ~ 1e-7
+      let cfg = ok (CSB.config 0.05)
+          n = 10 ^ (15 :: Int)
+          Just st = CSB.from_counts (3 * n `div` 10) n
+          (lo, hi) = CSB.interval cfg st
+      assertBool (show (lo, hi)) $
+        lo < 0.3 && 0.3 < hi && hi - lo > 1.0e-8 && hi - lo < 1.0e-6
   , testCase "intervals shrink onto a rate" $ do
       -- half-width ~ sqrt(2 r (1 - r) (log 1000 + log(tau n r (1 - r)) / 2)
       -- / n) = 0.022 at r = 0.3, n = 10000
@@ -1168,7 +1200,9 @@ hedge_tests :: TestTree
 hedge_tests = testGroup "two-sample hedge" [
     testCase "calibration: clip bound and cut points" $ do
       TS.clip_bound 1 [0.1, -0.2, 0.3] @?= 1
-      TS.clip_bound 0 (fmap fromIntegral [1 .. 100 :: Int]) @?= 200
+      -- the 99th smallest of a hundred, not the greatest
+      TS.clip_bound 0 (fmap fromIntegral [1 .. 100 :: Int]) @?= 198
+      TS.clip_bound 0 (replicate 99 1 ++ [1.0e9]) @?= 2
       TS.cut_points [] @?= []
       TS.cut_points [5, 5, 5] @?= [5]
   , testCase "a fresh hedge's e-value is one" $ do

@@ -198,10 +198,13 @@ strict_map f = go
 -- calibration ---------------------------------------------------------------
 
 -- | A clip bound from a warmup's statistics: twice the nearest-rank
---   ~p99 of their magnitudes, and at least a floor.
+--   p99 of their magnitudes (the @ceiling (0.99 m)@-th smallest of
+--   @m@), and at least a floor.
 --
 --   >>> clip_bound 1 [0.1, 0.2, -0.3]
 --   1.0
+--   >>> clip_bound 0 (replicate 99 1 ++ [1.0e9])
+--   2.0
 clip_bound :: Double -> [Double] -> Double
 clip_bound !floor_ ds = max floor_ (2 * nearest 0.99 (L.sort (fmap abs ds)))
 {-# INLINE clip_bound #-}
@@ -222,15 +225,15 @@ cut_points xs = case L.sort xs of
       | otherwise = a : dedup (b : rest)
     dedup ys = ys
 
--- the nearest-rank order statistic at a level of a sorted list, zero
--- of an empty one
+-- the nearest-rank order statistic at a level of a sorted list: its
+-- ceiling (q m)-th smallest of m, zero of an empty list
 nearest :: Double -> [Double] -> Double
 nearest !q xs = case drop i xs of
   x : _ -> x
   [] -> 0
   where
     !m = length xs
-    !i = max 0 (min (m - 1) (floor (q * fromIntegral m)))
+    !i = max 0 (min (m - 1) (ceiling (q * fromIntegral m) - 1))
 
 -- streaming -----------------------------------------------------------------
 
