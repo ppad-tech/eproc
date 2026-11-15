@@ -3,6 +3,7 @@
 module Main where
 
 import Data.Bits
+import Numeric (expm1)
 import qualified Data.List as L
 import Data.Word
 import qualified Numeric.Eproc.Bernoulli as Bern
@@ -10,8 +11,11 @@ import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.Common as C
 import qualified Numeric.Eproc.ConfSeq as CS
+import qualified Numeric.Eproc.ConfSeq.Bernoulli as CSB
+import qualified Numeric.Eproc.Merge as Merge
 import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
+import qualified Numeric.Eproc.TwoSample as TS
 import Test.Tasty
 import Test.Tasty.HUnit
 import qualified Test.Tasty.QuickCheck as QC
@@ -32,6 +36,9 @@ main = defaultMain $ testGroup "ppad-eproc" [
   , evalue_accessor_tests
   , mixture_tests
   , confseq_tests
+  , merge_tests
+  , bernoulli_confseq_tests
+  , hedge_tests
   ]
 
 -- partial helper: tests below hardcode valid configs.
@@ -1073,3 +1080,203 @@ confseq_tests = testGroup "confidence sequences" [
     assertLeftCS e = case e of
       Left _  -> pure ()
       Right _ -> assertFailure "expected Left"
+
+-- merging e-values -----------------------------------------------------------
+
+merge_tests :: TestTree
+merge_tests = testGroup "merge" [
+    testCase "the mean of no e-values is one" $
+      Merge.log_mean [] @?= 0
+  , testCase "the mean of e-values" $
+      assertBool "mean of 2 and 4 is not 3" $
+        abs (exp (Merge.log_mean [log 2, log 4]) - 3) < 1.0e-12
+  , testCase "the mean of nil e-values is nil" $
+      Merge.log_mean [log 0, log 0] @?= log 0
+  , testCase "an infinite e-value's mean is infinite" $ do
+      Merge.log_mean [1 / 0, 0] @?= 1 / 0
+      Merge.ebh 0.05 [1 / 0, 0] @?= [0]
+  , testCase "a product of e-values" $
+      assertBool "product of 2 and 3 is not 6" $
+        abs (Merge.log_product [log 2, log 3] - log 6) < 1.0e-12
+  , testCase "e-BH: the largest alone at its threshold" $
+      Merge.ebh 0.1 [log 100, 0, log 14] @?= [0]
+  , testCase "e-BH: a second at its threshold" $
+      Merge.ebh 0.1 [log 100, 0, log 15] @?= [0, 2]
+  , testCase "e-BH: none" $
+      Merge.ebh 0.1 [0, 1, 2] @?= []
+  , QC.testProperty "the mean lies between the least and the greatest" $
+      QC.forAll (QC.listOf1 (QC.choose (-20, 20))) $ \les ->
+        let m = Merge.log_mean les
+        in  m >= minimum les - 1.0e-9 && m <= maximum les + 1.0e-9
+  ]
+
+-- bernoulli confidence sequence ---------------------------------------------
+
+bernoulli_confseq_tests :: TestTree
+bernoulli_confseq_tests = testGroup "bernoulli confidence sequence" [
+    testCase "no trials, the whole interval" $ do
+      let cfg = ok (CSB.config 0.05)
+      CSB.interval cfg (CSB.initial cfg) @?= (0, 1)
+  , testCase "counts that cannot be" $ do
+      assertBool "more successes than trials" $
+        maybe True (const False) (CSB.from_counts 3 2)
+      assertBool "negative successes" $
+        maybe True (const False) (CSB.from_counts (-1) 2)
+  , testCase "streaming agrees with counts" $ do
+      let cfg = ok (CSB.config 0.05)
+          xs = take 100 (cycle [True, False, False])
+          st = L.foldl' (CSB.update cfg) (CSB.initial cfg) xs
+      Just (CSB.interval cfg st) @?=
+        fmap (CSB.interval cfg) (CSB.from_counts 34 100)
+  , testCase "an interval holds its estimate" $ do
+      let cfg = ok (CSB.config 0.05)
+          Just st = CSB.from_counts 30 100
+          (lo, hi) = CSB.interval cfg st
+      assertBool (show (lo, hi)) $ lo < 0.3 && 0.3 < hi
+  , testCase "no successes: from zero" $ do
+      let cfg = ok (CSB.config 0.05)
+          Just st = CSB.from_counts 0 1000
+          (lo, hi) = CSB.interval cfg st
+      assertBool (show (lo, hi)) $ lo == 0 && hi > 0 && hi < 0.02
+  , testCase "coverage of a small rate, every trial at once" $ do
+      -- a rate of 0.01 over 2000 trials, checked after every trial
+      let cfg = ok (CSB.config 0.05)
+          misses = length (filter id
+            (take 200 (fmap (csb_misses cfg 0.01 2000)
+                            (gen_seq (mk_gen 515151)))))
+      assertBool ("missed " ++ show misses ++ " of 200") $ misses <= 16
+  , testCase "no successes in very many trials: the exact end" $
+      -- with s = 0 the end solves -log(n + 1) - n log(1 - r) =
+      -- log(1 / alpha) in closed form
+      mapM_ (\n -> do
+        let cfg = ok (CSB.config 0.05)
+            Just st = CSB.from_counts 0 n
+            (_, hi) = CSB.interval cfg st
+            nd = fromIntegral n :: Double
+            exact = negate (expm1 (negate (log 20 + log (nd + 1)) / nd))
+        assertBool (show (n, hi, exact)) $
+          abs (hi - exact) / exact < 1.0e-9)
+        [10, 1000, 10 ^ (6 :: Int), 10 ^ (12 :: Int), 10 ^ (16 :: Int)]
+  , testCase "all successes in very many trials: the exact end" $ do
+      let cfg = ok (CSB.config 0.05)
+          n = 10 ^ (16 :: Int)
+          Just st = CSB.from_counts n n
+          (lo, _) = CSB.interval cfg st
+          nd = fromIntegral n :: Double
+          exact = exp (negate (log 20 + log (nd + 1)) / nd)
+      assertBool (show (lo, exact)) $ abs (lo - exact) < 1.0e-12
+  , testCase "a rate in very many trials: an interval about it" $ do
+      -- 3 in 10 of 10^15 trials: an interval of half-width ~ 1e-7
+      let cfg = ok (CSB.config 0.05)
+          n = 10 ^ (15 :: Int)
+          Just st = CSB.from_counts (3 * n `div` 10) n
+          (lo, hi) = CSB.interval cfg st
+      assertBool (show (lo, hi)) $
+        lo < 0.3 && 0.3 < hi && hi - lo > 1.0e-8 && hi - lo < 1.0e-6
+  , testCase "intervals shrink onto a rate" $ do
+      -- half-width ~ sqrt(2 r (1 - r) (log 1000 + log(tau n r (1 - r)) / 2)
+      -- / n) = 0.022 at r = 0.3, n = 10000
+      let cfg = ok (CSB.config 1.0e-3)
+          Just st = CSB.from_counts 3000 10000
+          (lo, hi) = CSB.interval cfg st
+      assertBool (show (lo, hi)) $ lo <= 0.3 && 0.3 <= hi && hi - lo < 0.05
+  ]
+
+-- whether a rate's interval misses it at any of some trials
+csb_misses :: CSB.Config -> Double -> Int -> Gen -> Bool
+csb_misses cfg p n g0 = go 0 g0 (CSB.initial cfg)
+  where
+    go !i !g !st
+      | i >= n = False
+      | otherwise =
+          let (u, g') = next_double g
+              st' = CSB.update cfg st (u < p)
+              (lo, hi) = CSB.interval cfg st'
+          in  (p < lo || p > hi) || go (i + 1) g' st'
+
+-- two-sample hedge -----------------------------------------------------------
+
+hedge_tests :: TestTree
+hedge_tests = testGroup "two-sample hedge" [
+    testCase "calibration: clip bound and cut points" $ do
+      TS.clip_bound 1 [0.1, -0.2, 0.3] @?= 1
+      -- the 99th smallest of a hundred, not the greatest
+      TS.clip_bound 0 (fmap fromIntegral [1 .. 100 :: Int]) @?= 198
+      TS.clip_bound 0 (replicate 99 1 ++ [1.0e9]) @?= 2
+      TS.cut_points [] @?= []
+      TS.cut_points [5, 5, 5] @?= [5]
+  , testCase "a fresh hedge's e-value is one" $ do
+      let cfg = ok (TS.config 0.05 [1, 4] 1 [0.5])
+      TS.log_evalue cfg (TS.initial cfg) @?= 0
+  , testCase "one law in both: rejects at most at its level" $ do
+      let cfg = ok (TS.config 0.05 [2, 8] 1 [0, 1, 2])
+          rate = hedge_rate cfg (geometric 0.4) (geometric 0.4) 500 200
+                   717171
+      assertBool ("rate " ++ show rate) $ rate <= 0.08
+  , testCase "a shifted law: rejects" $ do
+      let cfg = ok (TS.config 1.0e-3 [2, 8] 1 [0, 1, 2])
+          rate = hedge_rate cfg (geometric 0.5) (geometric 0.3) 2000 50
+                   727272
+      assertBool ("rate " ++ show rate) $ rate >= 0.95
+  , testCase "a law changed in spread alone: rejects" $ do
+      -- A always 5, B uniform on 3..7: one mean, two spreads
+      let cfg = ok (TS.config 1.0e-3 [4, 16] 1 [3, 4, 5, 6])
+          rate = hedge_rate cfg (const5) (spread5) 2000 50 737373
+      assertBool ("rate " ++ show rate) $ rate >= 0.95
+  , testCase "a margin above a shift: does not reject" $ do
+      let cfg = ok (TS.configInterval 1.5 1.0e-3 [4, 16] 1 [0, 1, 2])
+          rate = hedge_rate cfg (geometric 0.5) (geometric 0.35) 2000 50
+                   747474
+      assertBool ("rate " ++ show rate) $ rate <= 0.04
+  , testCase "a margin below a shift: rejects" $ do
+      let cfg = ok (TS.configInterval 0.3 1.0e-3 [4, 16] 1 [0, 1, 2])
+          rate = hedge_rate cfg (geometric 0.5) (geometric 0.35) 4000 50
+                   757575
+      assertBool ("rate " ++ show rate) $ rate >= 0.9
+  , testCase "a margin inside a clip bound" $
+      assertBool "a margin at a clip bound was accepted" $
+        either (const True) (const False)
+          (TS.configInterval 1 1.0e-3 [1] 1 [0])
+  , QC.testProperty "the supremum bounds the e-value" $
+      QC.forAll (QC.listOf ((,) <$> QC.choose (0, 9) <*> QC.choose (0, 9)))
+        $ \ps ->
+          let cfg = ok (TS.config 0.05 [2, 8] 1 [3, 6])
+              st = L.foldl' (TS.update_pair cfg) (TS.initial cfg)
+                     (fmap (\(a, b) -> (fromIntegral (a :: Int),
+                                        fromIntegral (b :: Int))) ps)
+          in  TS.log_evalue cfg st <= TS.log_evalue_sup st + 1.0e-12
+  ]
+
+-- the trials until a first success, each succeeding with p
+geometric :: Double -> Gen -> (Double, Gen)
+geometric p = go 1
+  where
+    go !n g = let (u, g') = next_double g
+              in  if u < p then (n, g') else go (n + 1) g'
+
+const5 :: Gen -> (Double, Gen)
+const5 g = (5, g)
+
+spread5 :: Gen -> (Double, Gen)
+spread5 g = let (u, g') = next_double g
+            in  (fromIntegral (3 + floor (u * 5) :: Int), g')
+
+-- the share of trials, each of at most some pairs, in which the hedge
+-- rejects
+hedge_rate
+  :: TS.Config -> (Gen -> (Double, Gen)) -> (Gen -> (Double, Gen))
+  -> Int -> Int -> Word64 -> Double
+hedge_rate cfg fa fb budget trials seed =
+  let gens = take trials (gen_seq (mk_gen seed))
+      rejects = length (filter id (fmap trial gens))
+  in  fromIntegral rejects / fromIntegral trials
+  where
+    trial g0 = go 0 g0 (TS.initial cfg)
+      where
+        go !n !g !st
+          | TS.decide cfg st == TS.Reject = True
+          | n >= budget = False
+          | otherwise =
+              let (a, g1) = fa g
+                  (b, g2) = fb g1
+              in  go (n + 1) g2 (TS.update_pair cfg st (a, b))

@@ -1,5 +1,18 @@
 # Changelog
 
+- 0.5.2 (unreleased)
+  * Adds Numeric.Eproc.Merge: the mean of e-values (an e-value under
+    any dependence), their product (under sequential validity), and
+    the e-BH procedure (Wang & Ramdas 2022).
+  * Adds Numeric.Eproc.ConfSeq.Bernoulli: an anytime-valid
+    confidence sequence for a Bernoulli rate by Robbins' uniform
+    mixture, exact at any rate and resumable from counts.
+  * Adds Numeric.Eproc.TwoSample: a two-sample test of equality in law
+    over an antisymmetric statistic, hedged over its sign, its
+    magnitude clipped at several bounds, and indicators at cut points;
+    an interval null on the clipped mean (configInterval); and the
+    warmup calibration of its clip bounds and cut points.
+
 - 0.5.1 (2026-10-11)
   * Supports GHC 9.8 (base 4.19), where Prelude does not export
     foldl'.

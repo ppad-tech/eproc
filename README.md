@@ -15,8 +15,10 @@ observation and stop whenever you like, without inflating the error
 rate.
 
 Includes tests for bounded means, paired differences, and Bernoulli
-rates, mixtures of such tests, and confidence sequences for bounded
-means.
+rates, mixtures of such tests, a two-sample test of equality in law
+hedged over several statistics, confidence sequences for bounded
+means and for Bernoulli rates, and the merging of e-values, with the
+e-BH procedure for choosing among several nulls.
 
 ## Usage
 
