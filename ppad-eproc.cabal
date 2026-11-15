@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               ppad-eproc
-version:            0.5.1
+version:            0.5.2
 synopsis:           Anytime-valid sequential testing via e-processes.
 license:            MIT
 license-file:       LICENSE
@@ -41,8 +41,11 @@ library
       Numeric.Eproc.Bounded
       Numeric.Eproc.Common
       Numeric.Eproc.ConfSeq
+      Numeric.Eproc.ConfSeq.Bernoulli
+      Numeric.Eproc.Merge
       Numeric.Eproc.Mixture
       Numeric.Eproc.Paired
+      Numeric.Eproc.TwoSample
   build-depends:
       base >= 4.9 && < 5
 
