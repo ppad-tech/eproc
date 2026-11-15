@@ -18,7 +18,8 @@
 -- at once, each a component e-process for the null:
 --
 --   * the sign of the difference @d = a - b@ (ties skipped), against
---     one law running above the other ("Numeric.Eproc.Bernoulli.TwoSided");
+--     one law running above the other
+--     ("Numeric.Eproc.Bernoulli.TwoSided");
 --
 --   * @d@ clipped at each of some bounds, against a shift in mean,
 --     without letting rare large differences dominate
@@ -28,11 +29,12 @@
 --     the laws' distribution functions differing at @q@ (a change in
 --     spread, say, that leaves the mean alone).
 --
--- The hedge's e-value is the components' mean ("Numeric.Eproc.Merge"),
--- an e-process for the null; the test rejects when its supremum so
--- far reaches @1 \/ alpha@, with probability at most @alpha@ under the
--- null, at any stopping time. The hedge's price is the log of its
--- number of components, against power on each.
+-- The hedge's e-value is the components' mean, mixed and latched by
+-- "Numeric.Eproc.Mixture": an e-process for the null; the test rejects
+-- when its supremum so far reaches @1 \/ alpha@, with probability at
+-- most @alpha@ under the null, at any stopping time. The hedge's
+-- price is the log of its number of components, against power on
+-- each.
 --
 -- Nothing ties the statistic to a pair. 'update' takes any statistic
 -- symmetric about zero under the null, and one per cut point bounded
@@ -97,19 +99,19 @@ import qualified Numeric.Eproc.Bernoulli.TwoSided as Sign
 import qualified Numeric.Eproc.Bounded as Magn
 import Numeric.Eproc.Common (Bettor(..), ConfigError(..), Verdict(..),
   finite)
-import Numeric.Eproc.Merge (log_mean)
+import qualified Numeric.Eproc.Mixture as Mix
 
 -- | Hedge configuration.
 data Config = Config {
-    cfg_alpha      :: {-# UNPACK #-} !Double
-  , cfg_log_thresh :: {-# UNPACK #-} !Double  -- log (1 / alpha)
-  , cfg_sign       :: !Sign.Config
+    cfg_sign       :: !Sign.Config
   , cfg_magn       :: ![(Double, Magn.Config)]  -- each clip bound, its
                                                 -- test
   , cfg_cdf_bound  :: {-# UNPACK #-} !Double
   , cfg_cdf        :: !Magn.Config               -- shared by every cut
   , cfg_cuts       :: ![Double]
   , cfg_interval   :: !Bool                      -- an interval null
+  , cfg_mix        :: !Mix.Config                -- the mixture of the
+                                                 -- components mixed
   }
 
 -- | The hedge after some observations.
@@ -118,7 +120,9 @@ data State = State {
   , st_sign    :: !Sign.State
   , st_magn    :: ![Magn.State]
   , st_cdf     :: ![Magn.State]
-  , st_sup     :: {-# UNPACK #-} !Double  -- the log e-value's supremum
+  , st_mixc    :: !Mix.Config  -- the mixture's, so that its
+                               -- accessors need no 'Config'
+  , st_mix     :: !Mix.State
   }
 
 -- | Build a 'Config' for the sharp null, at a level in @(0, 1)@, from
@@ -160,15 +164,19 @@ mk margin !alpha bs !u qs
       s <- Sign.config 0.5 alpha Newton
       ms <- traverse magn bs
       cd <- Magn.config 0 (negate u) u alpha Newton
+      -- every component mixed, or the clipped ones alone under an
+      -- interval null (which so needs at least one clip bound)
+      mx <- Mix.config
+        (maybe (1 + length bs + length qs) (const (length bs)) margin)
+        alpha
       pure Config {
-          cfg_alpha      = alpha
-        , cfg_log_thresh = log (1 / alpha)
-        , cfg_sign       = s
+          cfg_sign       = s
         , cfg_magn       = ms
         , cfg_cdf_bound  = u
         , cfg_cdf        = cd
         , cfg_cuts       = qs
         , cfg_interval   = maybe False (const True) margin
+        , cfg_mix        = mx
         }
   where
     magn !b
@@ -185,7 +193,8 @@ initial Config{..} = State {
   , st_sign = Sign.initial cfg_sign
   , st_magn = strict_map (Magn.initial . snd) cfg_magn
   , st_cdf  = strict_map (const (Magn.initial cfg_cdf)) cfg_cuts
-  , st_sup  = 0
+  , st_mixc = cfg_mix
+  , st_mix  = Mix.initial cfg_mix
   }
 
 -- a map whose list is whole, spine and elements, when evaluated at
@@ -248,14 +257,13 @@ nearest !q xs = case drop i xs of
 --   /Precondition/: one indicator statistic per cut point, in their
 --   order; any beyond them are ignored.
 update :: Config -> State -> Double -> [Double] -> State
-update cfg@Config{..} State{..} !d cs =
+update Config{..} State{..} !d cs =
   let !sg | d == 0 = st_sign
           | otherwise = Sign.update cfg_sign st_sign (d > 0)
       !mg = step_magn cfg_magn st_magn
       !cd = step_cdf cs st_cdf
-      st' = State (st_n + 1) sg mg cd st_sup
-      !le = log_evalue cfg st'
-  in  st' { st_sup = max st_sup le }
+      !mx = Mix.update cfg_mix st_mix (mixed cfg_interval sg mg cd)
+  in  State (st_n + 1) sg mg cd st_mixc mx
   where
     step_magn ((b, c) : bt) (s : ss) =
       let !s' = Magn.update c s (clip b d)
@@ -285,12 +293,19 @@ clip !b !x
   | otherwise = x
 {-# INLINE clip #-}
 
+-- the log e-values the hedge mixes: every component's, or the clipped
+-- components' alone under an interval null
+mixed :: Bool -> Sign.State -> [Magn.State] -> [Magn.State] -> [Double]
+mixed interval sg mg cd
+  | interval = fmap Magn.log_evalue mg
+  | otherwise =
+      Sign.log_evalue sg : fmap Magn.log_evalue mg <> fmap Magn.log_evalue cd
+{-# INLINE mixed #-}
+
 -- | 'Reject' iff the hedge's log e-value has reached @log(1 \/ alpha)@
 --   at some observation so far.
 decide :: Config -> State -> Verdict
-decide Config{..} State{..}
-  | st_sup >= cfg_log_thresh = Reject
-  | otherwise = Continue
+decide Config{..} State{..} = Mix.decide cfg_mix st_mix
 {-# INLINE decide #-}
 
 -- inspection ----------------------------------------------------------------
@@ -298,22 +313,18 @@ decide Config{..} State{..}
 -- | The hedge's current log e-value: the log of its components' mean,
 --   of the clipped components' alone under an interval null.
 log_evalue :: Config -> State -> Double
-log_evalue Config{..} State{..}
-  | cfg_interval = log_mean (fmap Magn.log_evalue st_magn)
-  | otherwise = log_mean
-      (Sign.log_evalue st_sign
-       : fmap Magn.log_evalue st_magn <> fmap Magn.log_evalue st_cdf)
+log_evalue Config{..} State{..} = Mix.log_evalue cfg_mix st_mix
 {-# INLINE log_evalue #-}
 
 -- | The supremum so far of the hedge's log e-value; zero before any
 --   observation.
 log_evalue_sup :: State -> Double
-log_evalue_sup = st_sup
+log_evalue_sup State{..} = Mix.log_evalue_sup st_mixc st_mix
 {-# INLINE log_evalue_sup #-}
 
 -- | The anytime-valid p-value: @min 1 (exp (- log_evalue_sup))@.
 p_value :: State -> Double
-p_value st = min 1 (exp (negate (st_sup st)))
+p_value State{..} = Mix.p_value st_mixc st_mix
 {-# INLINE p_value #-}
 
 -- | The sign component's current log e-value.

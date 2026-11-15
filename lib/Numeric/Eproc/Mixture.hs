@@ -25,7 +25,9 @@
 -- the sum dominates the max. Use a mixture when the alternative has
 -- several qualitatively different faces (a location shift, a shape
 -- change, a rare-outlier channel, ...) and you want a single test
--- with power against their union.
+-- with power against their union. "Numeric.Eproc.TwoSample" mixes
+-- its components through this module; to merge e-values once, rather
+-- than stream them, see "Numeric.Eproc.Merge".
 --
 -- This module does not own or update the components: they may be
 -- heterogeneous (different test modules, different observation
@@ -105,8 +107,8 @@ module Numeric.Eproc.Mixture (
   , samples
   ) where
 
-import qualified Data.List as L
-import Numeric.Eproc.Common (Verdict(..), ConfigError(..), finite)
+import Numeric.Eproc.Common (Verdict(..), ConfigError(..), finite,
+  log_sum_exps)
 
 -- types ----------------------------------------------------------------------
 
@@ -200,14 +202,10 @@ initial Config{..} = State {
 --   >>> let s1 = update cfg s0 [0.1, -0.2, 0.0, 0.4]
 update :: Config -> State -> [Double] -> State
 update _ st@State{..} les = case les of
-  []       -> st
-  (l : ls) ->
-    let !m = L.foldl' max l ls
-        !s = L.foldl' (\ !acc v -> acc + exp (v - m)) 0 les
-        -- all components at e-value zero: the mixture log-sum is
-        -- -Infinity, and (m +) would poison it into NaN.
-        !cur | isInfinite m && m < 0 = m
-             | otherwise             = m + log s
+  [] -> st
+  _  ->
+    -- infinite where a component is, of either sign, rather than NaN
+    let !cur = log_sum_exps les
     in  State {
             st_n           = st_n + 1
           , st_log_sum     = cur

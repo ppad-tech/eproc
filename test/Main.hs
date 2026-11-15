@@ -862,7 +862,16 @@ mixture_rate alpha p budget trials seed =
 
 mixture_tests :: TestTree
 mixture_tests = testGroup "mixture" [
-    testCase "fresh mixture sits at log K, p-value 1" $ do
+    testCase "an infinite component makes the mixture infinite" $ do
+      let cfg = ok (Mix.config 2 1.0e-3)
+          s1  = Mix.update cfg (Mix.initial cfg) [1 / 0, 0]
+      Mix.log_evalue cfg s1 @?= 1 / 0
+      Mix.decide cfg s1 @?= Mix.Reject
+  , testCase "no components leave the mixture as it was" $ do
+      let cfg = ok (Mix.config 2 1.0e-3)
+          s0  = Mix.initial cfg
+      Mix.log_evalue cfg (Mix.update cfg s0 []) @?= Mix.log_evalue cfg s0
+  , testCase "fresh mixture sits at log K, p-value 1" $ do
       let cfg = ok (Mix.config 4 1.0e-3)
           s0  = Mix.initial cfg
       assertBool "log_wealth is log K" $
@@ -1233,6 +1242,10 @@ hedge_tests = testGroup "two-sample hedge" [
           rate = hedge_rate cfg (geometric 0.5) (geometric 0.35) 4000 50
                    757575
       assertBool ("rate " ++ show rate) $ rate >= 0.9
+  , testCase "an interval null needs a clip bound" $
+      assertBool "an interval null without clip bounds was accepted" $
+        either (const True) (const False)
+          (TS.configInterval 1 1.0e-3 [] 1 [0])
   , testCase "a margin inside a clip bound" $
       assertBool "a margin at a clip bound was accepted" $
         either (const True) (const False)
