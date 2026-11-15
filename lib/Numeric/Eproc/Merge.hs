@@ -43,6 +43,8 @@ module Numeric.Eproc.Merge (
 import qualified Data.List as L
 import Data.Ord (Down(..), comparing)
 
+import Numeric.Eproc.Common (log_sum_exps)
+
 -- | The log of the mean of e-values given as logs: an e-value for
 --   the null they share, whatever their dependence. The mean of no
 --   e-values is taken to be one.
@@ -56,15 +58,7 @@ import Data.Ord (Down(..), comparing)
 log_mean :: [Double] -> Double
 log_mean les = case les of
   [] -> 0
-  (l : ls) ->
-    let !m = L.foldl' max l ls
-        !s = L.foldl' (\ !acc v -> acc + exp (v - m)) 0 les
-        !k = fromIntegral (length les) :: Double
-    -- an infinite e-value, of either sign, is the mean's sign too: an
-    -- e-value of zero among no greater, or one infinitely great
-    in  if isInfinite m
-          then m
-          else m + log s - log k
+  _ -> log_sum_exps les - log (fromIntegral (length les))
 {-# INLINE log_mean #-}
 
 -- | The log of the product of e-values given as logs: an e-value

@@ -30,7 +30,10 @@
 -- Pairing is required: independent two-sample testing without
 -- alignment would need to bet against a richer alternative (the
 -- joint distribution rather than the marginal difference) and is
--- beyond the scope of this module.
+-- beyond the scope of this module. This module tests equality of
+-- means, with known sample bounds; for equality of the laws
+-- themselves, by a hedge over several statistics of each pair, see
+-- "Numeric.Eproc.TwoSample".
 --
 -- == Example
 --

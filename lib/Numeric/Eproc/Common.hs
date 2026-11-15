@@ -33,9 +33,11 @@ module Numeric.Eproc.Common (
   -- * Internal: helpers
   , finite
   , log_sum_exp
+  , log_sum_exps
   , log2_dbl
   ) where
 
+import qualified Data.List as L
 import GHC.Float (log1p)
 
 -- | A predictable bettor.
@@ -160,6 +162,21 @@ log_sum_exp !a !b
   | a >= b    = a + log1p (exp (b - a))
   | otherwise = b + log1p (exp (a - b))
 {-# INLINE log_sum_exp #-}
+
+-- | The log of a sum of exponentials, of values given as logs:
+--   stable against overflow, @+Infinity@ where a term is, and
+--   @-Infinity@ of no terms or of terms all @-Infinity@. The sum
+--   'Numeric.Eproc.Mixture' latches and 'Numeric.Eproc.Merge'
+--   averages.
+log_sum_exps :: [Double] -> Double
+log_sum_exps les = case les of
+  [] -> negate (1 / 0)
+  (l : ls) ->
+    let !m = L.foldl' max l ls
+    in  if isInfinite m
+          then m
+          else m + log (L.foldl' (\ !acc v -> acc + exp (v - m)) 0 les)
+{-# INLINE log_sum_exps #-}
 
 -- | @log 2@ as a shared constant. Used both as the initial value of
 --   the two-sided running sup-log-sum (since @K^+_0 + K^-_0 = 2@) and
