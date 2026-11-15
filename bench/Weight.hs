@@ -9,8 +9,10 @@ import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.ConfSeq as CS
+import qualified Numeric.Eproc.ConfSeq.Bernoulli as CSB
 import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
+import qualified Numeric.Eproc.TwoSample as TS
 import Weigh
 
 instance NFData Bounded.State    where rnf !_ = ()
@@ -19,6 +21,8 @@ instance NFData Bern.State       where rnf !_ = ()
 instance NFData BernTS.State     where rnf !_ = ()
 instance NFData Mix.State        where rnf !_ = ()
 instance NFData Bounded.Verdict  where rnf !_ = ()
+-- TwoSample.State's lists are built whole by 'initial' and 'update'
+instance NFData TS.State         where rnf !_ = ()
 
 -- partial helper for benches: configs here are hardcoded valid.
 ok :: Either e a -> a
@@ -40,6 +44,8 @@ main = mainWith $ do
   mix_stream
   confseq_update
   confseq_stream
+  hedge_stream
+  bernoulli_interval
 
 update :: Weigh ()
 update =
@@ -171,3 +177,20 @@ confseq_stream =
       run_c = L.foldl' (CS.update cfg) (CS.initial cfg)
   in  wgroup "ConfSeq.update (1000-sample fold, g = 200)" $ do
         func "plug-in" run_c xs
+
+hedge_stream :: Weigh ()
+hedge_stream =
+  let !ps  = force (take 1000 (cycle [(3, 2), (1, 4), (2, 2)]))
+      !cfg = ok (TS.config 1.0e-3 [2, 8] 1 [1, 2, 3, 4, 5])
+      run_h = L.foldl' (TS.update_pair cfg) (TS.initial cfg)
+  in  wgroup "TwoSample.update_pair (1000-pair fold, 5 cuts)" $ do
+        func "pairs" run_h ps
+
+bernoulli_interval :: Weigh ()
+bernoulli_interval =
+  let !cfg = ok (CSB.config 1.0e-3)
+      st n = case CSB.from_counts (3 * n `div` 10) n of
+        Just s -> s
+        Nothing -> error "weigh: invalid counts"
+  in  wgroup "ConfSeq.Bernoulli.interval" $ do
+        func "n = 100000" (CSB.interval cfg) (st 100000)

@@ -9,8 +9,11 @@ import qualified Numeric.Eproc.Bernoulli as Bern
 import qualified Numeric.Eproc.Bernoulli.TwoSided as BernTS
 import qualified Numeric.Eproc.Bounded as Bounded
 import qualified Numeric.Eproc.ConfSeq as CS
+import qualified Numeric.Eproc.ConfSeq.Bernoulli as CSB
+import qualified Numeric.Eproc.Merge as Merge
 import qualified Numeric.Eproc.Mixture as Mix
 import qualified Numeric.Eproc.Paired as P
+import qualified Numeric.Eproc.TwoSample as TS
 import Criterion.Main
 
 -- all relevant fields are strict (and UNPACK'd for the doubles), so
@@ -22,6 +25,8 @@ instance NFData Bern.State       where rnf !_ = ()
 instance NFData BernTS.State     where rnf !_ = ()
 instance NFData Mix.State        where rnf !_ = ()
 instance NFData Bounded.Verdict  where rnf !_ = ()
+-- TwoSample.State's lists are built whole by 'initial' and 'update'
+instance NFData TS.State         where rnf !_ = ()
 
 -- partial helper for benches: configs here are hardcoded valid, so a
 -- 'Left' would be a bench-suite bug.
@@ -43,6 +48,10 @@ main = defaultMain [
   , mix_stream
   , confseq_update
   , confseq_stream
+  , hedge_update
+  , hedge_stream
+  , bernoulli_interval
+  , merge
   ]
 
 update :: Benchmark
@@ -188,4 +197,40 @@ confseq_stream =
       run_c = L.foldl' (CS.update cfg) (CS.initial cfg)
   in  bgroup "ConfSeq.update (1000-sample fold, g = 200)" [
           bench "plug-in" $ nf run_c xs
+        ]
+
+hedge_update :: Benchmark
+hedge_update =
+  let !cfg = ok (TS.config 1.0e-3 [2, 8] 1 [1, 2, 3, 4, 5])
+      !st  = TS.initial cfg
+  in  bgroup "TwoSample.update_pair (one step, 5 cuts)" [
+          bench "pair" $ nf (TS.update_pair cfg st) (3, 2)
+        ]
+
+hedge_stream :: Benchmark
+hedge_stream =
+  let !ps  = force (take 1000 (cycle [(3, 2), (1, 4), (2, 2)]))
+      !cfg = ok (TS.config 1.0e-3 [2, 8] 1 [1, 2, 3, 4, 5])
+      run_h = L.foldl' (TS.update_pair cfg) (TS.initial cfg)
+  in  bgroup "TwoSample.update_pair (1000-pair fold, 5 cuts)" [
+          bench "pairs" $ nf run_h ps
+        ]
+
+bernoulli_interval :: Benchmark
+bernoulli_interval =
+  let !cfg = ok (CSB.config 1.0e-3)
+      st n = case CSB.from_counts (3 * n `div` 10) n of
+        Just s -> s
+        Nothing -> error "bench: invalid counts"
+  in  bgroup "ConfSeq.Bernoulli.interval" [
+          bench "n = 100"    $ nf (CSB.interval cfg) (st 100)
+        , bench "n = 100000" $ nf (CSB.interval cfg) (st 100000)
+        ]
+
+merge :: Benchmark
+merge =
+  let !les = force (take 100 (cycle [0.1, -0.4, 2.0, 0.0, 7.5]))
+  in  bgroup "Merge (100 log e-values)" [
+          bench "log_mean" $ nf Merge.log_mean les
+        , bench "ebh"      $ nf (Merge.ebh 0.05) les
         ]
