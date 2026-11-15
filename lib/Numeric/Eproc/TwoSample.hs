@@ -81,9 +81,13 @@ module Numeric.Eproc.TwoSample (
   -- * Inspection
   , log_evalue
   , log_evalue_sup
+  , p_value
   , log_evalue_sign
   , log_evalue_magnitude
   , log_evalue_cdf
+  , log_evalue_sup_sign
+  , log_evalue_sup_magnitude
+  , log_evalue_sup_cdf
   , samples
   ) where
 
@@ -307,6 +311,11 @@ log_evalue_sup :: State -> Double
 log_evalue_sup = st_sup
 {-# INLINE log_evalue_sup #-}
 
+-- | The anytime-valid p-value: @min 1 (exp (- log_evalue_sup))@.
+p_value :: State -> Double
+p_value st = min 1 (exp (negate (st_sup st)))
+{-# INLINE p_value #-}
+
 -- | The sign component's current log e-value.
 log_evalue_sign :: State -> Double
 log_evalue_sign = Sign.log_evalue . st_sign
@@ -323,6 +332,24 @@ log_evalue_magnitude = fmap Magn.log_evalue . st_magn
 log_evalue_cdf :: State -> [Double]
 log_evalue_cdf = fmap Magn.log_evalue . st_cdf
 {-# INLINE log_evalue_cdf #-}
+
+-- | The supremum so far of the sign component's log e-value: which
+--   component's evidence peaked is the shape of a difference found.
+log_evalue_sup_sign :: State -> Double
+log_evalue_sup_sign = Sign.log_evalue_sup . st_sign
+{-# INLINE log_evalue_sup_sign #-}
+
+-- | The supremum so far of each clipped component's log e-value, in
+--   the order of the clip bounds.
+log_evalue_sup_magnitude :: State -> [Double]
+log_evalue_sup_magnitude = fmap Magn.log_evalue_sup . st_magn
+{-# INLINE log_evalue_sup_magnitude #-}
+
+-- | The supremum so far of each indicator component's log e-value, in
+--   the order of the cut points.
+log_evalue_sup_cdf :: State -> [Double]
+log_evalue_sup_cdf = fmap Magn.log_evalue_sup . st_cdf
+{-# INLINE log_evalue_sup_cdf #-}
 
 -- | How many observations the hedge has seen.
 samples :: State -> Int

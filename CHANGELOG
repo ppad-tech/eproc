@@ -1,5 +1,11 @@
 # Changelog
 
+- 0.5.3 (unreleased)
+  * Adds to Numeric.Eproc.TwoSample the anytime-valid p-value and
+    each component's supremum so far (log_evalue_sup_sign,
+    log_evalue_sup_magnitude, log_evalue_sup_cdf): which component's
+    evidence peaked is the shape of a difference found.
+
 - 0.5.2 (2026-11-15)
   * Adds Numeric.Eproc.Merge: the mean of e-values (an e-value under
     any dependence), their product (under sequential validity), and
