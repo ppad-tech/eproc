@@ -1,6 +1,6 @@
 # Changelog
 
-- 0.5.2 (unreleased)
+- 0.5.2 (2026-11-15)
   * Adds Numeric.Eproc.Merge: the mean of e-values (an e-value under
     any dependence), their product (under sequential validity), and
     the e-BH procedure (Wang & Ramdas 2022).
