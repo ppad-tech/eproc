@@ -1,6 +1,6 @@
 # Changelog
 
-- 0.5.4 (unreleased)
+- 0.5.4 (2026-11-15)
   * Fixes Numeric.Eproc.Mixture.update turning a component's infinite
     log e-value into NaN: the mixture is infinite too, and rejects.
   * Numeric.Eproc.TwoSample mixes and latches its components through
