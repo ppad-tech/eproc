@@ -1237,6 +1237,20 @@ hedge_tests = testGroup "two-sample hedge" [
       assertBool "a margin at a clip bound was accepted" $
         either (const True) (const False)
           (TS.configInterval 1 1.0e-3 [1] 1 [0])
+  , QC.testProperty "each component's supremum bounds its e-value" $
+      QC.forAll (QC.listOf ((,) <$> QC.choose (0, 9) <*> QC.choose (0, 9)))
+        $ \ps ->
+          let cfg = ok (TS.config 0.05 [2, 8] 1 [3, 6])
+              st = L.foldl' (TS.update_pair cfg) (TS.initial cfg)
+                     (fmap (\(a, b) -> (fromIntegral (a :: Int),
+                                        fromIntegral (b :: Int))) ps)
+              under xs ys = and (zipWith (\x y -> x <= y + 1.0e-12) xs ys)
+          in  TS.log_evalue_sign st <= TS.log_evalue_sup_sign st + 1.0e-12
+                && under (TS.log_evalue_magnitude st)
+                         (TS.log_evalue_sup_magnitude st)
+                && under (TS.log_evalue_cdf st) (TS.log_evalue_sup_cdf st)
+                && TS.p_value st
+                     == min 1 (exp (negate (TS.log_evalue_sup st)))
   , QC.testProperty "the supremum bounds the e-value" $
       QC.forAll (QC.listOf ((,) <$> QC.choose (0, 9) <*> QC.choose (0, 9)))
         $ \ps ->
