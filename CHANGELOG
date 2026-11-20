@@ -1,5 +1,9 @@
 # Changelog
 
+- 0.5.5 (unreleased)
+  * The test suite draws from ppad-random's xoshiro256++, in place of
+    its own generator. The library is unchanged.
+
 - 0.5.4 (2026-11-15)
   * Fixes Numeric.Eproc.Mixture.update turning a component's infinite
     log e-value into NaN: the mixture is infinite too, and rejects.
