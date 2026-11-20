@@ -61,6 +61,7 @@ test-suite eproc-tests
   build-depends:
       base
     , ppad-eproc
+    , ppad-random >= 0.1 && < 0.2
     , tasty
     , tasty-hunit
     , tasty-quickcheck
