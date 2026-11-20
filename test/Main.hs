@@ -2,7 +2,8 @@
 
 module Main where
 
-import Data.Bits
+import Crypto.PRNG.Pure (Gen)
+import qualified Crypto.PRNG.Pure as R
 import Numeric (expm1)
 import qualified Data.List as L
 import Data.Word
@@ -48,43 +49,27 @@ ok (Left _)  = error "test: invalid config"
 
 -- prng -----------------------------------------------------------------------
 
--- inline PCG-style PRNG, no external deps.
-
-newtype Gen = Gen Word64
+-- xoshiro256++, via ppad-random.
 
 mk_gen :: Word64 -> Gen
-mk_gen = Gen
-
-step_gen :: Gen -> (Word64, Gen)
-step_gen (Gen s) =
-  let !s' = s * 6364136223846793005 + 1442695040888963407
-  in  (s', Gen s')
+mk_gen = R.new
 
 next_double :: Gen -> (Double, Gen)
-next_double g =
-  let (w, g') = step_gen g
-      !x = fromIntegral (w `shiftR` 11 .&. 0x1FFFFFFFFFFFFF) /
-           9007199254740992
-  in  (x, g')
+next_double g = case R.double g of
+  R.Draw x g' -> (x, g')
 
 bernoulli :: Double -> Gen -> (Double, Gen)
 bernoulli !p g =
   let (u, g') = next_double g
   in  (if u < p then 1.0 else 0.0, g')
 
--- per-trial independent seeds via a splitmix-style finalizer.
--- previously this just stepped the prng once per trial, which made
--- consecutive trials share all but one observation -- fine under a
--- symmetric H_0 (rare streaks cancel), catastrophic under a skewed
--- one (rare streaks dominate all overlapping trials).
+-- per-trial independent streams, each 2 ^ 128 draws past the last,
+-- so no two trials share an observation. trials stepped once apart
+-- in one stream would share all but one -- fine under a symmetric
+-- H_0 (rare streaks cancel), catastrophic under a skewed one (rare
+-- streaks dominate all overlapping trials).
 gen_seq :: Gen -> [Gen]
-gen_seq (Gen s0) =
-  [Gen (mix64 (s0 + fromIntegral i)) | i <- [(0 :: Word64) ..]]
-  where
-    mix64 x =
-      let !y = (x `xor` (x `shiftR` 30)) * 0xbf58476d1ce4e5b9
-          !z = (y `xor` (y `shiftR` 27)) * 0x94d049bb133111eb
-      in  z `xor` (z `shiftR` 31)
+gen_seq = iterate R.jump
 
 -- harness --------------------------------------------------------------------
 
